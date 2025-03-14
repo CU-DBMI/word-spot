@@ -1,0 +1,71 @@
+:root {
+  --theme: rebeccapurple;
+  --rounded: 3px;
+  --shadow: 1px 2px 5px #00000020;
+  --border: solid 1px lightgray;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  font-family: "Inter", sans-serif;
+  line-height: 2;
+}
+
+body {
+  margin: 0;
+}
+
+#app {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+main {
+  display: flex;
+  flex-direction: column;
+  flex-grow: 1;
+}
+
+section {
+  padding: 20px;
+}
+
+h1 {
+  width: 100%;
+  margin: 0;
+  font-size: 1.5rem;
+}
+
+h2 {
+  width: 100%;
+  margin: 0;
+  margin-bottom: -20px;
+  font-size: 1.2rem;
+}
+
+strong {
+  font-weight: 600;
+}
+
+button {
+  display: inline-flex;
+  justify-content: center;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 10px;
+  color: white;
+  background: var(--theme);
+  border: none;
+  border-radius: var(--rounded);
+  font: inherit;
+  box-shadow: var(--shadow);
+  cursor: pointer;
+}
+
+button:hover {
+  opacity: 0.75;
+}
