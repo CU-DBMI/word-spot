@@ -34,6 +34,10 @@ section {
   padding: 20px;
 }
 
+section:last-child {
+  flex-grow: 1;
+}
+
 h1 {
   width: 100%;
   margin: 0;
@@ -43,8 +47,13 @@ h1 {
 h2 {
   width: 100%;
   margin: 0;
-  margin-bottom: -20px;
+  margin-top: 20px;
   font-size: 1.2rem;
+}
+
+p {
+  width: 100%;
+  margin: 0;
 }
 
 strong {
@@ -68,4 +77,16 @@ button {
 
 button:hover {
   opacity: 0.75;
+}
+
+.tippy-box {
+  padding: 5px;
+  background: black;
+  box-shadow: var(--shadow);
+  color: white;
+  font: inherit;
+}
+
+.tippy-arrow {
+  color: black;
 }

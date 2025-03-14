@@ -2,69 +2,97 @@
   <section>
     <div class="input">
       <h1>Ghostbusters</h1>
-      <h2>Text to check</h2>
-      <AppTextbox />
-      <h2>Text to check for</h2>
-      <AppTextbox />
-      <button>Use Recommended</button>
+      <AppTextbox v-model="input" placeholder="Text to check" />
+      <div class="controls">
+        <button @click="input = exampleText">Example</button>
+        <button
+          v-tooltip="
+            'Load .txt or .docx file. Or drag & drop file onto textbox.'
+          "
+        >
+          Upload
+        </button>
+      </div>
+
+      <AppTextbox
+        v-model="list"
+        placeholder="Phrases to check for"
+        v-tooltip="'Comma or newline-separated'"
+      />
+      <div class="controls">
+        <button @click="list = exampleList">Example</button>
+        <button
+          v-tooltip="
+            'Load .txt or .docx file. Or drag & drop file onto textbox.'
+          "
+        >
+          Upload
+        </button>
+      </div>
     </div>
 
     <div class="output">
+      <h2>Summary</h2>
+      <p>Lorem ipsum odor amet, consectetuer adipiscing elit.</p>
       <h2>Checked Text</h2>
-      <div class="checked">
-        <p>
-          Lorem ipsum odor amet, consectetuer adipiscing elit. Rutrum felis per
-          accumsan vehicula sit dictumst. Elit curabitur senectus per egestas
-          aliquam nunc facilisis sagittis ad. Lectus curae nulla diam fermentum
-          id feugiat. Sit mollis rhoncus consectetur ut vulputate dictum, metus
-          hendrerit. Natoque mauris orci cubilia sapien tristique nec nec eu.
-          Potenti habitant turpis quis augue enim feugiat potenti malesuada.
-        </p>
-        <p>
-          Elementum nibh potenti adipiscing placerat leo nisi malesuada
-          facilisis maecenas. Mi aptent vivamus congue id, phasellus integer.
-          Vel nulla nulla ultricies fermentum feugiat, ut at. At pulvinar
-          commodo fusce rhoncus fames eleifend laoreet. At aliquet metus, semper
-          lectus gravida facilisi. Cubilia commodo hendrerit ultrices porttitor
-          tempus sociosqu. Nulla lacinia eu conubia condimentum fringilla nec
-          nibh id mus. Potenti molestie neque cursus gravida torquent integer
-          leo. Aptent quisque nisl mus et praesent leo.
-        </p>
-        <p>
-          Sapien porttitor sit luctus risus; laoreet duis lobortis. Sollicitudin
-          fermentum rhoncus nibh justo ullamcorper. Nibh vulputate sagittis
-          mattis egestas inceptos nisl conubia purus. Risus a class vivamus
-          potenti lobortis torquent, pulvinar scelerisque. Dignissim sapien
-          netus nunc sagittis interdum fermentum sed. Bibendum rutrum convallis
-          volutpat per ut orci. Nunc lectus morbi consequat maximus penatibus.
-          Felis morbi suspendisse ornare dui cubilia. Sem ad facilisis nisl et
-          enim rutrum.
-        </p>
-      </div>
-      <h2>Check Summary</h2>
-      <div class="summary">
-        <p>
-          Lorem ipsum odor amet, consectetuer adipiscing elit. Venenatis natoque
-          nullam sodales dictumst potenti cubilia dis. Adipiscing neque suscipit
-          faucibus iaculis pharetra dui montes arcu. Conubia dictum suscipit
-          vivamus mollis inceptos himenaeos senectus netus. Placerat tempor
-          sapien ipsum eget a. Id donec faucibus ipsum habitant torquent
-          ullamcorper, a tincidunt. At ultrices bibendum mollis efficitur
-          volutpat neque nec cubilia.
-        </p>
-      </div>
+      <p v-for="(paragraph, key) of output" :key="key">
+        <template v-for="({ inputWord, score }, key) of paragraph" :key="key">
+          <span
+            v-tooltip="`${(100 * score).toFixed(0)}% match`"
+            class="match"
+            :style="{ '--score': score }"
+          >
+            {{ inputWord }}
+          </span>
+          {{ " " }}
+        </template>
+      </p>
     </div>
   </section>
 </template>
 
 <script setup lang="ts">
+import { computed } from "vue";
 import AppTextbox from "../components/AppTextbox.vue";
+import { useLocalStorage } from "@vueuse/core";
+import Fuse from "fuse.js";
+import exampleText from "./example-text.txt?raw";
+import exampleList from "./example-list.txt?raw";
+import { orderBy } from "lodash";
+
+const input = useLocalStorage("input", "");
+const list = useLocalStorage("list", "");
+
+const splitInput = computed(() =>
+  input.value.split(/\n+/).map((p) => p.split(/\s+/))
+);
+const splitList = computed(() => list.value.split(/[\s,]+/).filter(Boolean));
+
+const output = computed(() => {
+  return splitInput.value.map((paragraph) =>
+    paragraph.map((inputWord) => {
+      const fuse = new Fuse([inputWord], {
+        threshold: 0.1,
+        distance: 10,
+        includeScore: true,
+      });
+      let matches = splitList.value
+        .map((listWord) => {
+          const match = fuse.search(listWord)[0];
+          if (!match) return;
+          return { listWord, score: 1 - (match.score ?? 1) };
+        })
+        .filter((match) => !!match);
+      matches = orderBy(matches, "score");
+      return { inputWord, score: matches[0]?.score || 0 };
+    })
+  );
+});
 </script>
 
 <style scoped>
 section {
   display: flex;
-  flex-grow: 1;
   padding: 0;
 }
 
@@ -78,23 +106,36 @@ section {
 }
 
 .input {
-  min-height: 100%;
   box-shadow: var(--shadow);
-}
-
-.output {
-  flex-grow: 3;
+  max-height: 100vh;
 }
 
 textarea:first-of-type {
   width: 25vw;
-  height: 50vh;
+  height: 25vh;
+  flex-shrink: 0;
 }
 
 textarea:last-of-type {
-  flex-grow: 1;
-  resize: vertical;
   width: 0;
   min-width: 100%;
+  flex-grow: 1;
+  flex-shrink: 0;
+  resize: vertical;
+}
+
+.controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.match {
+  background: hsl(
+    calc(120 - var(--score) * 120),
+    100%,
+    50%,
+    calc(50% * var(--score))
+  );
 }
 </style>
