@@ -36,9 +36,12 @@
       <p>Lorem ipsum odor amet, consectetuer adipiscing elit.</p>
       <h2>Checked Text</h2>
       <p v-for="(paragraph, key) of output" :key="key">
-        <template v-for="({ inputWord, score }, key) of paragraph" :key="key">
+        <template
+          v-for="({ inputWord, score, listWord }, key) of paragraph"
+          :key="key"
+        >
           <span
-            v-tooltip="`${(100 * score).toFixed(0)}% match`"
+            v-tooltip="`${(100 * score).toFixed(0)}% match with &quot;${listWord}&quot;`"
             class="match"
             :style="{ '--score': score }"
           >
@@ -66,13 +69,13 @@ const list = useLocalStorage("list", "");
 const splitInput = computed(() =>
   input.value.split(/\n+/).map((p) => p.split(/\s+/))
 );
-const splitList = computed(() => list.value.split(/[\s,]+/).filter(Boolean));
+const splitList = computed(() => list.value.split(/[\n,]+/).filter(Boolean));
 
 const output = computed(() => {
   return splitInput.value.map((paragraph) =>
     paragraph.map((inputWord) => {
       const fuse = new Fuse([inputWord], {
-        threshold: 0.1,
+        threshold: 0.3,
         distance: 10,
         includeScore: true,
       });
@@ -83,8 +86,12 @@ const output = computed(() => {
           return { listWord, score: 1 - (match.score ?? 1) };
         })
         .filter((match) => !!match);
-      matches = orderBy(matches, "score");
-      return { inputWord, score: matches[0]?.score || 0 };
+      matches = orderBy(matches, "score", ["desc"]);
+      return {
+        inputWord,
+        score: matches[0]?.score || 0,
+        listWord: matches[0]?.listWord ?? "",
+      };
     })
   );
 });
