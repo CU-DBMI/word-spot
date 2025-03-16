@@ -119,7 +119,8 @@ const output = computed(() =>
           orderBy(
             matches.filter(({ start, end }) => inRange(char, start, end)),
             /** sort in order of appearance, useful for showing latest match tooltip when hovering overlapping ranges */
-            "indices[0]"
+            "start",
+            "desc"
           ),
       }))
       .filter(
