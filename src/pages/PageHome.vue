@@ -37,24 +37,23 @@
       <h2>Checked Text</h2>
       <p v-for="(paragraph, key) in output" :key="key">
         <AppTooltip
-          v-for="({ text, matches }, key) in paragraph"
+          v-for="({ inputText, matches }, key) in paragraph"
           :key="key"
           class="match"
-          :style="{ background: mixScoreColors(map(matches, 'score')) }"
+          :style="{
+            background: `hsla(40, 100%, 50%, ${matches.length / maxOverlap})`,
+          }"
         >
-          <template #default>{{ text }}</template>
+          <template #default>{{ inputText }}</template>
           <template v-if="matches.length" #content>
             <div class="tooltip-table">
-              <span>Input text</span>
-              <span>...matches...</span>
-              <span>list item</span>
               <template
-                v-for="({ inputText, listText, score }, key) in matches"
+                v-for="({ inputText, listEntry }, key) in matches"
                 :key="key"
               >
-                <span>{{ inputText }}</span>
-                <span>{{ (100 * score).toFixed(0) }}%</span>
-                <span>{{ listText }}</span>
+                <span>"{{ inputText }}"</span>
+                <span>matches</span>
+                <span>"{{ listEntry }}"</span>
               </template>
             </div>
           </template>
@@ -66,13 +65,11 @@
 
 <script setup lang="ts">
 import { computed } from "vue";
-import AppTextbox from "../components/AppTextbox.vue";
 import { useLocalStorage } from "@vueuse/core";
-import Fuse from "fuse.js";
+import { inRange, isEqual, maxBy, orderBy, range } from "lodash";
+import AppTextbox from "../components/AppTextbox.vue";
 import exampleText from "./example-text.txt?raw";
 import exampleList from "./example-list.txt?raw";
-import { inRange, isEqual, map, orderBy, pick, range } from "lodash";
-import { hsl, type HSLColor } from "d3";
 
 const input = useLocalStorage("input", "");
 const list = useLocalStorage("list", "");
@@ -90,40 +87,27 @@ const splitList = computed(() =>
 const output = computed(() =>
   /** for each input paragraph */
   splitInput.value.map((paragraph) => {
-    /** fuzzy-search paragraph */
-    const fuse = new Fuse([paragraph], {
-      threshold: 0.2,
-      ignoreLocation: true,
-      includeScore: true,
-      includeMatches: true,
-      findAllMatches: true,
-    });
-
     const matches = splitList.value
-      /** search paragraph for each list entry */
-      .map((entry) => ({ listText: entry, search: fuse.search(entry) }))
-      .map(({ listText, search }) => {
-        /** find most salient list entry match */
-        const firstResult = search[0];
-        if (!firstResult) return;
-        const firstMatch = firstResult.matches?.[0];
-        if (!firstMatch) return;
-        /** find longest match */
-        const firstIndices = orderBy(
-          firstMatch.indices,
-          ([start, end]) => end - start,
-          "desc"
-        )[0];
-        if (!firstIndices) return;
-        return {
-          listText,
-          inputText: paragraph.slice(...firstIndices),
-          /** make 1 strongest match, 0 weakest */
-          score: 1 - (firstResult.score ?? 1),
-          indices: firstIndices,
-        };
-      })
-      .filter((entry) => !!entry);
+      /** for each list entry */
+      .map((listEntry) => ({
+        listEntry,
+        /** get all instances of entry in paragraph */
+        matches: [...paragraph.matchAll(new RegExp(listEntry, "gi"))],
+      }))
+      .map(({ listEntry, matches }) =>
+        matches.map((match) => {
+          /** get location of match */
+          const start = match.index;
+          const end = start + listEntry.length;
+          return {
+            inputText: paragraph.slice(start, end),
+            listEntry,
+            start,
+            end,
+          };
+        })
+      )
+      .flat();
 
     const highlighting = range(0, paragraph.length)
       /** for each character in paragraph */
@@ -133,9 +117,7 @@ const output = computed(() =>
         matches:
           /** sort so array order doesn't matter for equality */
           orderBy(
-            matches.filter(({ indices: [start, end] }) =>
-              inRange(char, start, end)
-            ),
+            matches.filter(({ start, end }) => inRange(char, start, end)),
             /** sort in order of appearance, useful for showing latest match tooltip when hovering overlapping ranges */
             "indices[0]"
           ),
@@ -147,37 +129,22 @@ const output = computed(() =>
       )
       .map(({ char, matches }, index, array) => ({
         /** get original paragraph text in range */
-        text: paragraph.slice(char, array[index + 1]?.char ?? paragraph.length),
-        /** list of matches associated with range */
-        matches: matches.map((match) =>
-          pick(match, ["inputText", "listText", "score"])
+        inputText: paragraph.slice(
+          char,
+          array[index + 1]?.char ?? paragraph.length
         ),
+        /** list of matches associated with range */
+        matches,
       }));
 
     return highlighting;
   })
 );
 
-/** map 0-1 to color */
-const getScoreColor = (score: number) => hsl(90 * (1 - score), 1, 0.5, score);
-
-/** composite colors */
-const alphaComposite = (bg: HSLColor, fg: HSLColor) => {
-  const a = (1 - fg.opacity) * bg.opacity + fg.opacity;
-  const h = (1 - fg.opacity) * bg.opacity * bg.h + fg.opacity * fg.h;
-  const s = (1 - fg.opacity) * bg.opacity * bg.s + fg.opacity * fg.s;
-  const l = (1 - fg.opacity) * bg.opacity * bg.l + fg.opacity * fg.l;
-  return hsl(h / a, s / a, l / a, a);
-};
-
-/** mix list of scores to get one color */
-const mixScoreColors = (scores: number[]) => {
-  const colors = orderBy(scores, undefined, "desc").map(getScoreColor);
-  let color = colors.pop();
-  if (!color) return "";
-  for (const nextColor of colors) color = alphaComposite(color, nextColor);
-  return color.formatHex8();
-};
+/** max number of overlapping ranges */
+const maxOverlap = computed(
+  () => maxBy(output.value.flat(), "matches.length")?.matches.length ?? 0
+);
 </script>
 
 <style scoped>
