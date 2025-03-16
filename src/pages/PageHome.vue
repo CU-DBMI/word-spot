@@ -1,7 +1,6 @@
 <template>
   <section>
     <div class="input">
-      <h1>Ghostbusters</h1>
       <AppTextbox
         ref="inputElement"
         v-model="input"
@@ -11,8 +10,8 @@
         <button @click="input = exampleText">Example</button>
         <AppUpload
           :drop-zone="inputElement?.element"
-          :accept="['.txt']"
-          tooltip="Load .txt or .docx file. Or drag & drop file onto textbox."
+          :accept="uploadMimeTypes"
+          :tooltip="uploadTooltip"
           @files="(files) => (input = files[0]?.text ?? '')"
         />
       </div>
@@ -27,14 +26,14 @@
         <button @click="list = exampleList">Example</button>
         <AppUpload
           :drop-zone="listElement?.element"
-          :accept="['.txt']"
-          tooltip="Load .txt or .docx file. Or drag & drop file onto textbox."
+          :accept="uploadMimeTypes"
+          :tooltip="uploadTooltip"
           @files="(files) => (list = files[0]?.text ?? '')"
         />
       </div>
     </div>
 
-    <div class="output">
+    <div v-if="output.length" class="output">
       <h2>Summary</h2>
       <p>Lorem ipsum odor amet, consectetuer adipiscing elit.</p>
       <h2>Checked Text</h2>
@@ -68,26 +67,45 @@
 
 <script setup lang="ts">
 import { computed, useTemplateRef } from "vue";
-import { useLocalStorage } from "@vueuse/core";
+import { useDebounce, useLocalStorage } from "@vueuse/core";
 import { inRange, isEqual, maxBy, orderBy, range } from "lodash";
 import AppTextbox from "../components/AppTextbox.vue";
 import exampleText from "./example-text.txt?raw";
 import exampleList from "./example-list.txt?raw";
 import AppUpload from "../components/AppUpload.vue";
 
+/** upload settings */
+const uploadMimeTypes = [
+  ".txt",
+  ".doc",
+  ".docx",
+  ".pdf",
+  "text/plain",
+  "application/pdf",
+  "application/msword",
+];
+const uploadTooltip =
+  "Load text, Word, or PDF file. Or drag & drop file onto textbox.";
+
+/** elements */
 const inputElement = useTemplateRef("inputElement");
 const listElement = useTemplateRef("listElement");
 
+/** state */
 const input = useLocalStorage("input", "");
 const list = useLocalStorage("list", "");
 
+/** debounced state */
+const debouncedInput = useDebounce(input, 200);
+const debouncedList = useDebounce(list, 200);
+
 /** split input by paragraph */
 const splitInput = computed(() =>
-  input.value.split(/\n+/).filter((entry) => entry.trim())
+  debouncedInput.value.split(/\n+/).filter((entry) => entry.trim())
 );
 /** split list by separators */
 const splitList = computed(() =>
-  list.value.split(/[\n,]+/).filter((entry) => entry.trim())
+  debouncedList.value.split(/[\n,]+/).filter((entry) => entry.trim())
 );
 
 /** analyzed output */

@@ -13,6 +13,7 @@
 <script setup lang="ts">
 import { useEventListener } from "@vueuse/core";
 import { ref, useTemplateRef, watchEffect } from "vue";
+import { parsePdf, parseWordDoc } from "../util/upload";
 
 type Props = {
   dropZone?: HTMLElement | null;
@@ -47,10 +48,18 @@ const onLoad = async (fileList: FileList | null) => {
 
   /** parse file uploads as text */
   const files = await Promise.all(
-    Array.from(fileList).map(async (file) => ({
-      text: await file.text(),
-      filename: file.name,
-    }))
+    Array.from(fileList).map(async (file) => {
+      let text = "";
+
+      /** parse as appropriate format */
+      if (file.name.match(/\.(doc|docx)$/))
+        text = await parseWordDoc(await file.arrayBuffer());
+      else if (file.name.match(/\.(pdf)$/))
+        text = await parsePdf(await file.arrayBuffer());
+      else text = await file.text();
+
+      return { text, filename: file.name };
+    })
   );
 
   /** notify parent of new files */
