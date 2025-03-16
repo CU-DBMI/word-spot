@@ -1,11 +1,14 @@
 <template>
   <textarea
+    ref="element"
     :value="modelValue"
     @input="(event) => emit('update:modelValue', (event.target as HTMLTextAreaElement)?.value || '')"
   />
 </template>
 
 <script setup lang="ts">
+import { useTemplateRef } from "vue";
+
 type Props = {
   modelValue?: string;
 };
@@ -17,6 +20,10 @@ type Emits = {
 };
 
 const emit = defineEmits<Emits>();
+
+const element = useTemplateRef("element");
+
+defineExpose({ element });
 </script>
 
 <style scoped>

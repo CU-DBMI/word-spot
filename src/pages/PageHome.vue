@@ -2,32 +2,35 @@
   <section>
     <div class="input">
       <h1>Ghostbusters</h1>
-      <AppTextbox v-model="input" placeholder="Text to check" />
+      <AppTextbox
+        ref="inputElement"
+        v-model="input"
+        placeholder="Text to check"
+      />
       <div class="controls">
         <button @click="input = exampleText">Example</button>
-        <button
-          v-tooltip="
-            'Load .txt or .docx file. Or drag & drop file onto textbox.'
-          "
-        >
-          Upload
-        </button>
+        <AppUpload
+          :drop-zone="inputElement?.element"
+          :accept="['.txt']"
+          tooltip="Load .txt or .docx file. Or drag & drop file onto textbox."
+          @files="(files) => (input = files[0]?.text ?? '')"
+        />
       </div>
 
       <AppTextbox
+        ref="listElement"
         v-model="list"
         placeholder="Phrases to check for"
         v-tooltip="'Comma or newline-separated'"
       />
       <div class="controls">
         <button @click="list = exampleList">Example</button>
-        <button
-          v-tooltip="
-            'Load .txt or .docx file. Or drag & drop file onto textbox.'
-          "
-        >
-          Upload
-        </button>
+        <AppUpload
+          :drop-zone="listElement?.element"
+          :accept="['.txt']"
+          tooltip="Load .txt or .docx file. Or drag & drop file onto textbox."
+          @files="(files) => (list = files[0]?.text ?? '')"
+        />
       </div>
     </div>
 
@@ -64,12 +67,16 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, useTemplateRef } from "vue";
 import { useLocalStorage } from "@vueuse/core";
 import { inRange, isEqual, maxBy, orderBy, range } from "lodash";
 import AppTextbox from "../components/AppTextbox.vue";
 import exampleText from "./example-text.txt?raw";
 import exampleList from "./example-list.txt?raw";
+import AppUpload from "../components/AppUpload.vue";
+
+const inputElement = useTemplateRef("inputElement");
+const listElement = useTemplateRef("listElement");
 
 const input = useLocalStorage("input", "");
 const list = useLocalStorage("list", "");
