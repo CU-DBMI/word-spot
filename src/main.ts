@@ -7,5 +7,13 @@ import "./style.css";
 
 const app = createApp(App);
 app.use(router);
-app.use(VueTippy, { directive: "tooltip", defaultProps: { delay: [100, 0] } });
+app.use(VueTippy, {
+  directive: "tooltip",
+  component: "AppTooltip",
+  defaultProps: {
+    delay: [100, 0],
+    allowHTML: true,
+    // onHide: () => false,
+  },
+});
 app.mount("#app");

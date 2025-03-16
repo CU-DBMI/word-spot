@@ -35,20 +35,30 @@
       <h2>Summary</h2>
       <p>Lorem ipsum odor amet, consectetuer adipiscing elit.</p>
       <h2>Checked Text</h2>
-      <p v-for="(paragraph, key) of output" :key="key">
-        <template
-          v-for="({ inputWord, score, listWord }, key) of paragraph"
+      <p v-for="(paragraph, key) in output" :key="key">
+        <AppTooltip
+          v-for="({ text, matches }, key) in paragraph"
           :key="key"
+          class="match"
+          :style="{ background: mixScoreColors(map(matches, 'score')) }"
         >
-          <span
-            v-tooltip="`${(100 * score).toFixed(0)}% match with &quot;${listWord}&quot;`"
-            class="match"
-            :style="{ '--score': score }"
-          >
-            {{ inputWord }}
-          </span>
-          {{ " " }}
-        </template>
+          <template #default>{{ text }}</template>
+          <template v-if="matches.length" #content>
+            <div class="tooltip-table">
+              <span>Input text</span>
+              <span>...matches...</span>
+              <span>list item</span>
+              <template
+                v-for="({ inputText, listText, score }, key) in matches"
+                :key="key"
+              >
+                <span>{{ inputText }}</span>
+                <span>{{ (100 * score).toFixed(0) }}%</span>
+                <span>{{ listText }}</span>
+              </template>
+            </div>
+          </template>
+        </AppTooltip>
       </p>
     </div>
   </section>
@@ -61,40 +71,113 @@ import { useLocalStorage } from "@vueuse/core";
 import Fuse from "fuse.js";
 import exampleText from "./example-text.txt?raw";
 import exampleList from "./example-list.txt?raw";
-import { orderBy } from "lodash";
+import { inRange, isEqual, map, orderBy, pick, range } from "lodash";
+import { hsl, type HSLColor } from "d3";
 
 const input = useLocalStorage("input", "");
 const list = useLocalStorage("list", "");
 
+/** split input by paragraph */
 const splitInput = computed(() =>
-  input.value.split(/\n+/).map((p) => p.split(/\s+/))
+  input.value.split(/\n+/).filter((entry) => entry.trim())
 );
-const splitList = computed(() => list.value.split(/[\n,]+/).filter(Boolean));
+/** split list by separators */
+const splitList = computed(() =>
+  list.value.split(/[\n,]+/).filter((entry) => entry.trim())
+);
 
-const output = computed(() => {
-  return splitInput.value.map((paragraph) =>
-    paragraph.map((inputWord) => {
-      const fuse = new Fuse([inputWord], {
-        threshold: 0.3,
-        distance: 10,
-        includeScore: true,
-      });
-      let matches = splitList.value
-        .map((listWord) => {
-          const match = fuse.search(listWord)[0];
-          if (!match) return;
-          return { listWord, score: 1 - (match.score ?? 1) };
-        })
-        .filter((match) => !!match);
-      matches = orderBy(matches, "score", ["desc"]);
-      return {
-        inputWord,
-        score: matches[0]?.score || 0,
-        listWord: matches[0]?.listWord ?? "",
-      };
-    })
-  );
-});
+/** analyzed output */
+const output = computed(() =>
+  /** for each input paragraph */
+  splitInput.value.map((paragraph) => {
+    /** fuzzy-search paragraph */
+    const fuse = new Fuse([paragraph], {
+      threshold: 0.2,
+      ignoreLocation: true,
+      includeScore: true,
+      includeMatches: true,
+      findAllMatches: true,
+    });
+
+    const matches = splitList.value
+      /** search paragraph for each list entry */
+      .map((entry) => ({ listText: entry, search: fuse.search(entry) }))
+      .map(({ listText, search }) => {
+        /** find most salient list entry match */
+        const firstResult = search[0];
+        if (!firstResult) return;
+        const firstMatch = firstResult.matches?.[0];
+        if (!firstMatch) return;
+        /** find longest match */
+        const firstIndices = orderBy(
+          firstMatch.indices,
+          ([start, end]) => end - start,
+          "desc"
+        )[0];
+        if (!firstIndices) return;
+        return {
+          listText,
+          inputText: paragraph.slice(...firstIndices),
+          /** make 1 strongest match, 0 weakest */
+          score: 1 - (firstResult.score ?? 1),
+          indices: firstIndices,
+        };
+      })
+      .filter((entry) => !!entry);
+
+    const highlighting = range(0, paragraph.length)
+      /** for each character in paragraph */
+      .map((char) => ({
+        char,
+        /** get match ranges that include this char */
+        matches:
+          /** sort so array order doesn't matter for equality */
+          orderBy(
+            matches.filter(({ indices: [start, end] }) =>
+              inRange(char, start, end)
+            ),
+            /** sort in order of appearance, useful for showing latest match tooltip when hovering overlapping ranges */
+            "indices[0]"
+          ),
+      }))
+      .filter(
+        /** remove char entries that are same as previous */
+        ({ matches }, index, array) =>
+          !isEqual(matches, array[index - 1]?.matches)
+      )
+      .map(({ char, matches }, index, array) => ({
+        /** get original paragraph text in range */
+        text: paragraph.slice(char, array[index + 1]?.char ?? paragraph.length),
+        /** list of matches associated with range */
+        matches: matches.map((match) =>
+          pick(match, ["inputText", "listText", "score"])
+        ),
+      }));
+
+    return highlighting;
+  })
+);
+
+/** map 0-1 to color */
+const getScoreColor = (score: number) => hsl(90 * (1 - score), 1, 0.5, score);
+
+/** composite colors */
+const alphaComposite = (bg: HSLColor, fg: HSLColor) => {
+  const a = (1 - fg.opacity) * bg.opacity + fg.opacity;
+  const h = (1 - fg.opacity) * bg.opacity * bg.h + fg.opacity * fg.h;
+  const s = (1 - fg.opacity) * bg.opacity * bg.s + fg.opacity * fg.s;
+  const l = (1 - fg.opacity) * bg.opacity * bg.l + fg.opacity * fg.l;
+  return hsl(h / a, s / a, l / a, a);
+};
+
+/** mix list of scores to get one color */
+const mixScoreColors = (scores: number[]) => {
+  const colors = orderBy(scores, undefined, "desc").map(getScoreColor);
+  let color = colors.pop();
+  if (!color) return "";
+  for (const nextColor of colors) color = alphaComposite(color, nextColor);
+  return color.formatHex8();
+};
 </script>
 
 <style scoped>
@@ -137,12 +220,14 @@ textarea:last-of-type {
   gap: 10px;
 }
 
-.match {
-  background: hsl(
-    calc(120 - var(--score) * 120),
-    100%,
-    50%,
-    calc(50% * var(--score))
-  );
+.tooltip-table {
+  display: grid;
+  grid-template-columns: repeat(3, auto);
+  align-items: center;
+  gap: 10px 20px;
+}
+
+.tooltip-table > :nth-child(3n + 2) {
+  text-align: center;
 }
 </style>
