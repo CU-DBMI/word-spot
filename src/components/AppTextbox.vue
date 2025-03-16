@@ -38,7 +38,6 @@ div {
   width: 100%;
   min-width: 200px;
   min-height: 3lh;
-  border: var(--border);
   border-radius: var(--rounded);
   box-shadow: var(--shadow);
   overflow: hidden;

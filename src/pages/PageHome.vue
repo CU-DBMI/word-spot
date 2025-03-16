@@ -39,7 +39,18 @@
 
     <div v-if="output.length" class="output">
       <h2>Summary</h2>
-      <p>Lorem ipsum odor amet, consectetuer adipiscing elit.</p>
+      <div class="summary">
+        <span>Total Matches</span>
+        <span>
+          {{ summary.total.toLocaleString() }}
+        </span>
+
+        <template v-for="(matches, key) in summary.counts" :key="key">
+          <span>{{ key }}</span>
+          <span>{{ matches.length.toLocaleString() }}</span>
+        </template>
+      </div>
+
       <h2>Checked Text</h2>
       <p v-for="(paragraph, key) in output" :key="key">
         <AppTooltip
@@ -52,7 +63,7 @@
         >
           <template #default>{{ inputText }}</template>
           <template v-if="matches.length" #content>
-            <div class="tooltip-table">
+            <div class="tooltip">
               <template
                 v-for="({ inputText, listEntry }, key) in matches"
                 :key="key"
@@ -74,7 +85,7 @@
 <script setup lang="ts">
 import { computed, useTemplateRef } from "vue";
 import { useDebounce, useLocalStorage } from "@vueuse/core";
-import { inRange, isEqual, maxBy, orderBy, range } from "lodash";
+import { groupBy, inRange, isEqual, maxBy, orderBy, range } from "lodash";
 import AppTextbox from "../components/AppTextbox.vue";
 import AppUpload from "../components/AppUpload.vue";
 import AppButton from "../components/AppButton.vue";
@@ -108,7 +119,7 @@ const debouncedList = useDebounce(list, 200);
 
 /** split input by paragraph */
 const splitInput = computed(() =>
-  debouncedInput.value.split(/\n+/).filter((entry) => entry.trim())
+  debouncedInput.value.split(/\n+/).filter((paragraph) => paragraph.trim())
 );
 /** split list by separators */
 const splitList = computed(() =>
@@ -174,6 +185,16 @@ const output = computed(() =>
   })
 );
 
+/** output summary info */
+const summary = computed(() => {
+  const matches = output.value
+    .map((paragraph) => paragraph.map((range) => range.matches))
+    .flat()
+    .flat();
+  const counts = groupBy(matches, "listEntry");
+  return { total: matches.length, counts };
+});
+
 /** max number of overlapping ranges */
 const maxOverlap = computed(
   () => maxBy(output.value.flat(), "matches.length")?.matches.length ?? 0
@@ -190,13 +211,23 @@ section {
 .output {
   display: flex;
   flex-direction: column;
+  justify-content: center;
   align-items: center;
   gap: 20px;
   padding: 40px;
 }
 
+.input > :first-child,
+.output > :first-child {
+  margin-top: 0;
+}
+
+.input > :last-child,
+.output > :last-child {
+  margin-bottom: 0;
+}
+
 .input {
-  box-shadow: var(--shadow);
   max-height: 100vh;
 }
 
@@ -220,14 +251,63 @@ section {
   gap: 10px;
 }
 
-.tooltip-table {
+.output {
+  flex-grow: 1;
+  align-self: flex-start;
+}
+
+.summary {
+  --cols: 3;
+  display: grid;
+  grid-template-columns: repeat(calc(2 * var(--cols)), auto);
+  gap: 10px 20px;
+  width: 100%;
+  min-height: 3lh;
+  height: 120px;
+  padding: 20px;
+  overflow-x: auto;
+  overflow-y: auto;
+  box-shadow: var(--shadow);
+  border-radius: var(--rounded);
+  resize: vertical;
+}
+
+.summary > * {
+  min-width: 0;
+}
+
+.summary > :nth-child(1) {
+  font-weight: 600;
+}
+
+.summary > :nth-child(3) {
+  grid-column: 1;
+}
+
+.summary > :nth-child(even) {
+  font-weight: 500;
+}
+
+@media (max-width: 1200px) {
+  .summary {
+    --cols: 2;
+  }
+}
+
+@media (max-width: 800px) {
+  .summary {
+    --cols: 1;
+  }
+}
+
+.tooltip {
   display: grid;
   grid-template-columns: repeat(3, auto);
   align-items: center;
   gap: 10px 20px;
 }
 
-.tooltip-table > :nth-child(3n + 2) {
+.tooltip > :nth-child(3n + 2) {
   text-align: center;
 }
 </style>

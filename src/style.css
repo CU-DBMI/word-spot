@@ -1,8 +1,7 @@
 :root {
   --theme: rebeccapurple;
   --rounded: 3px;
-  --shadow: 1px 2px 5px #00000020;
-  --border: solid 1px lightgray;
+  --shadow: 0 0 2px #00000040, 1px 2px 5px #00000020;
 }
 
 * {
