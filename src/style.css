@@ -66,17 +66,25 @@ button {
   align-items: center;
   gap: 5px;
   padding: 5px 10px;
-  color: white;
-  background: var(--theme);
   border: none;
   border-radius: var(--rounded);
+  background: none;
   font: inherit;
-  box-shadow: var(--shadow);
   cursor: pointer;
 }
 
 button:hover {
-  opacity: 0.75;
+  color: var(--theme);
+}
+
+textarea {
+  width: 100%;
+  height: 100%;
+  padding: 10px;
+  font: inherit;
+  border: none;
+  border-radius: var(--rounded);
+  resize: none;
 }
 
 .tippy-box {

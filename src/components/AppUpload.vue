@@ -1,5 +1,5 @@
 <template>
-  <button v-tooltip="tooltip" @click="onClick">Upload</button>
+  <AppButton v-tooltip="tooltip" @click="onClick">Upload</AppButton>
   <input
     ref="input"
     type="file"
@@ -14,6 +14,7 @@
 import { useEventListener } from "@vueuse/core";
 import { ref, useTemplateRef, watchEffect } from "vue";
 import { parsePdf, parseWordDoc } from "../util/upload";
+import AppButton from "./AppButton.vue";
 
 type Props = {
   dropZone?: HTMLElement | null;

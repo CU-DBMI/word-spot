@@ -1,13 +1,15 @@
 <template>
   <section>
     <div class="input">
+      <h2>Input</h2>
       <AppTextbox
         ref="inputElement"
         v-model="input"
+        class="input-textbox"
         placeholder="Text to check"
       />
       <div class="controls">
-        <button @click="input = exampleText">Example</button>
+        <AppButton @click="input = exampleText">Example</AppButton>
         <AppUpload
           :drop-zone="inputElement?.element"
           :accept="uploadMimeTypes"
@@ -16,14 +18,16 @@
         />
       </div>
 
+      <h2>List</h2>
       <AppTextbox
         ref="listElement"
         v-model="list"
+        class="list-textbox"
         placeholder="Phrases to check for"
         v-tooltip="'Comma or newline-separated'"
       />
       <div class="controls">
-        <button @click="list = exampleList">Example</button>
+        <AppButton @click="list = exampleList">Example</AppButton>
         <AppUpload
           :drop-zone="listElement?.element"
           :accept="uploadMimeTypes"
@@ -62,6 +66,8 @@
         </AppTooltip>
       </p>
     </div>
+
+    <div v-else class="output" :style="{ opacity: 0.5 }">Enter some text</div>
   </section>
 </template>
 
@@ -70,9 +76,10 @@ import { computed, useTemplateRef } from "vue";
 import { useDebounce, useLocalStorage } from "@vueuse/core";
 import { inRange, isEqual, maxBy, orderBy, range } from "lodash";
 import AppTextbox from "../components/AppTextbox.vue";
+import AppUpload from "../components/AppUpload.vue";
+import AppButton from "../components/AppButton.vue";
 import exampleText from "./example-text.txt?raw";
 import exampleList from "./example-list.txt?raw";
-import AppUpload from "../components/AppUpload.vue";
 
 /** upload settings */
 const uploadMimeTypes = [
@@ -193,13 +200,13 @@ section {
   max-height: 100vh;
 }
 
-textarea:first-of-type {
+.input-textbox {
   width: 25vw;
   height: 25vh;
   flex-shrink: 0;
 }
 
-textarea:last-of-type {
+.list-textbox {
   width: 0;
   min-width: 100%;
   flex-grow: 1;
