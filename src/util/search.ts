@@ -1,5 +1,5 @@
 import damerauLevenshtein from "damerau-levenshtein";
-import { map, uniqueId } from "lodash";
+import { map } from "lodash";
 
 /** reference:
  * https://freedium.cfd/https://marian-caikovski.medium.com/fuzzy-search-for-keywords-in-free-text-f732ecdc9519
@@ -35,7 +35,6 @@ export const fuzzySearch = (
     score: number;
     start: number;
     end: number;
-    id: number;
   }[] = [];
 
   /** split paragraph into separate words */
@@ -70,7 +69,6 @@ export const fuzzySearch = (
             score,
             start,
             end,
-            id: 1 + Number(uniqueId()),
           });
       }
     }

@@ -45,15 +45,15 @@ div {
 }
 
 textarea {
-  padding-right: 30px;
+  padding-right: 20px;
 }
 
 button {
   position: absolute;
   top: 0;
   right: 0;
-  width: 40px;
-  height: 40px;
+  width: 30px;
+  height: 30px;
   background: none;
   color: black;
   font-size: 1.3rem;

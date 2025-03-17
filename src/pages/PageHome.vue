@@ -56,7 +56,7 @@
     <div class="output">
       <h2>Summary</h2>
 
-      <div v-if="highlights.length" ref="summaryElement" class="summary">
+      <div v-if="summary.total" ref="summaryElement" class="summary">
         <span>Total Matches</span>
         <span>
           {{ summary.total.toLocaleString() }}
@@ -68,39 +68,40 @@
         </template>
       </div>
 
-      <p v-else class="placeholder">Enter some text</p>
+      <p v-if="!search.length" class="placeholder">Enter a search</p>
+      <p v-else-if="!summary.total" class="placeholder">No matches</p>
 
       <h2>Results</h2>
 
-      <template v-if="highlights.length">
-        <p v-for="(paragraph, key) in highlights" :key="key">
+      <template v-if="withSlices.length">
+        <p v-for="(paragraph, key) in withSlices" :key="key">
           <AppTooltip
-            v-for="({ text, matches, ids, strength }, key) in paragraph"
-            :key="JSON.stringify({ key, paragraph })"
+            v-for="slice in paragraph"
+            :key="slice.id"
             :class="[
-              strength && 'highlight',
-              ids.includes(hover) && 'highlight-hover',
+              slice.strength && 'highlight',
+              slice.highlightIds.includes(hover) && 'highlight-hover',
             ]"
-            :style="{ '--strength': strength / maxStrength }"
-            @mouseenter="setHover(matches)"
+            :style="{ '--strength': slice.strength }"
+            @mouseenter="setHover(slice.highlights)"
             @mouseleave="clearHover"
           >
-            <template #default>{{ text }}</template>
-            <template v-if="matches.length" #content>
+            <template #default>{{ slice.original }}</template>
+            <template v-if="slice.highlights[0]" #content>
               <div class="tooltip">
-                <div
-                  v-for="(value, key) in groupBy(matches, 'text')"
-                  class="tooltip-row"
-                  :key="key"
-                >
-                  <template v-if="value[0]?.id === hover">
-                    <div>"{{ key }}" matches...</div>
-                    <div class="tooltip-subrow">
-                      <div v-for="({ search, score }, key) in value" :key="key">
-                        • "{{ search }}" ({{ (100 * score).toFixed(0) }}%)
-                      </div>
-                    </div>
-                  </template>
+                <div>"{{ slice.highlights[0].text }}" matches...</div>
+                <div class="tooltip-indent">
+                  <div
+                    v-for="(match, key) in slice.highlights[0].matches.slice(
+                      0,
+                      5
+                    )"
+                    :key="key"
+                  >
+                    • "{{ match.search }}" ({{
+                      (100 * match.score).toFixed(0)
+                    }}%)
+                  </div>
                 </div>
               </div>
             </template>
@@ -122,7 +123,6 @@ import {
   isEqual,
   map,
   max,
-  maxBy,
   orderBy,
   range,
   sumBy,
@@ -130,10 +130,11 @@ import {
 import AppTextbox from "../components/AppTextbox.vue";
 import AppUpload from "../components/AppUpload.vue";
 import AppButton from "../components/AppButton.vue";
-import exampleText from "./example-text.txt?raw";
-import exampleSearch from "./example-search.txt?raw";
 import { fuzzySearch, splitWords } from "../util/search";
 import { useScrollable } from "../util/composables";
+import exampleText from "./example-text.txt?raw";
+import exampleSearch from "./example-search.txt?raw";
+import { getId } from "../util/misc";
 
 /** upload settings */
 const uploadMimeTypes = [
@@ -153,6 +154,7 @@ const textElement = useTemplateRef("textElement");
 const searchElement = useTemplateRef("searchElement");
 const summaryElement = useTemplateRef("summaryElement");
 
+/** scroll indicators */
 useScrollable(summaryElement);
 
 /** state */
@@ -175,8 +177,8 @@ const searches = computed(() =>
   debouncedSearch.value.split(/[\n,]+/).filter((entry) => entry.trim())
 );
 
-/** fuzzy search matches */
-const paragraphsWithMatches = computed(() => {
+/** paragraphs with fuzzy search matches */
+const withMatches = computed(() => {
   /** get max word window for fuzzy search */
   const maxSearchWords =
     max(searches.value.map((search) => splitWords(search).length)) ?? 1;
@@ -193,46 +195,95 @@ const paragraphsWithMatches = computed(() => {
   }));
 });
 
-/** highlighted output */
-const highlights = computed(() =>
-  /** for each paragraphs */
-  paragraphsWithMatches.value.map(({ paragraph, matches }) =>
-    /** convert matches into sequentially-renderable highlighted dom elements */
-    range(0, paragraph.length)
-      /** for each character in paragraph */
-      .map((char) => ({
-        char,
-        /** get match highlights that include this char */
-        matches:
-          /** sort so array order doesn't matter for equality */
-          orderBy(
-            matches.filter(({ start, end }) => inRange(char, start, end)),
-            "start"
-          ),
-      }))
-      .filter(
-        /** remove char entries that are same as previous */
-        ({ matches }, index, array) =>
-          !isEqual(matches, array[index - 1]?.matches)
-      )
-      .map(({ char, matches }, index, array) => ({
-        /** original paragraph text in highlight, to render */
-        text: paragraph.slice(char, array[index + 1]?.char ?? paragraph.length),
-        /** list of matches associated with highlight */
-        matches: orderBy(matches, "score", "desc"),
-        /** sum scores to get "strength" for coloring */
-        strength: sumBy(matches, "score"),
-        /** ids of contained matches */
-        ids: map(matches, "id"),
-      }))
-  )
-);
+/** paragraphs with highlighted slices */
+const withSlices = computed(() => {
+  const paragraphs = withMatches.value.map(
+    ({ paragraph, matches }, paragraphIndex) =>
+      /** convert matches into sequentially-renderable highlighted dom elements */
+      range(0, paragraph.length)
+        /** for each character in paragraph */
+        .map((char) => ({
+          char,
+          matches:
+            /** sort so array order doesn't matter for equality */
+            orderBy(
+              /** get match highlights that include this char */
+              matches.filter(({ start, end }) => inRange(char, start, end)),
+              /** put slices that start later first, for benefit of hover and tooltip */
+              "start",
+              "desc"
+            ),
+        }))
+        .filter(
+          /** remove char entries that are same as previous */
+          ({ matches }, index, array) =>
+            !isEqual(matches, array[index - 1]?.matches)
+        )
+        .map(({ char, matches }, index, array) => {
+          /** original slice of paragraph to render */
+          const original = paragraph.slice(
+            char,
+            array[index + 1]?.char ?? paragraph.length
+          );
+
+          /** get unique id for slice */
+          const id = getId({ char, matches });
+
+          /** list of highlights associated with slice */
+          const highlights = Object.values(groupBy(matches, "text")).map(
+            (fullMatches) => {
+              /** these fields should be same for all matches, so just take first */
+              const { text, start, end } = fullMatches[0]!;
+
+              /** sort stronger matches first */
+              fullMatches = orderBy(fullMatches, "score", "desc");
+
+              /** only keep fields that we need, and that are different for every match */
+              const matches = map(fullMatches, ({ search, score }) => ({
+                search,
+                score,
+              }));
+
+              const highlight = { text, matches };
+
+              /** get unique id for highlight */
+              const id = getId({ paragraphIndex, start, end, highlight });
+
+              return { id, ...highlight };
+            }
+          );
+
+          /** extract out highlight ids for convenience */
+          const highlightIds = map(highlights, "id");
+
+          /** "strength", used for coloring. start empty, calc after. */
+          const strength = 0;
+
+          return { id, original, highlights, highlightIds, strength };
+        })
+  );
+
+  /** determine max # of highlights that will ever overlap each other */
+  const maxOverlapping =
+    max(map(paragraphs.flat(), (paragraph) => paragraph.highlights.length)) ??
+    1;
+
+  /** calculate slice strengths */
+  for (const paragraph of paragraphs)
+    for (const slice of paragraph)
+      slice.strength = sumBy(slice.highlights, (highlight) => {
+        /** use strongest (first) search match score */
+        const strength = highlight.matches[0]?.score ?? 0;
+        /** ensure sum of highlight strengths on a slice never exceeds 1 */
+        return strength / maxOverlapping;
+      });
+
+  return paragraphs;
+});
 
 /** summary info */
 const summary = computed(() => {
-  const matches = paragraphsWithMatches.value
-    .map(({ matches }) => matches)
-    .flat();
+  const matches = withMatches.value.map(({ matches }) => matches).flat();
   const total = matches.length;
   const counts = orderBy(
     Object.entries(groupBy(matches, "search")).map(
@@ -244,16 +295,11 @@ const summary = computed(() => {
   return { total, counts };
 });
 
-/** max highlight strength, for normalizing */
-const maxStrength = computed(
-  () => maxBy(highlights.value.flat(), "strength")?.strength ?? 0
-);
-
-type Matches = (typeof highlights.value)[number][number]["matches"];
+type Highlights = (typeof withSlices.value)[number][number]["highlights"];
 
 /** handle hover */
-const setHover = (matches: Matches) =>
-  (hover.value = orderBy(matches, "start", "desc")[0]?.id ?? 0);
+const setHover = (highlights: Highlights) =>
+  (hover.value = highlights[0]?.id ?? 0);
 const clearHover = () => (hover.value = 0);
 </script>
 
@@ -263,11 +309,21 @@ section {
   padding: 0;
 }
 
+@media (max-width: 600px) {
+  section {
+    flex-direction: column;
+  }
+
+  .input > * {
+    width: 100% !important;
+    max-width: unset !important;
+  }
+}
+
 .input,
 .output {
   display: flex;
   flex-direction: column;
-  justify-content: center;
   align-items: center;
   gap: 20px;
   padding: 40px;
@@ -285,10 +341,12 @@ section {
 
 .input {
   max-height: 100vh;
+  box-shadow: var(--shadow);
 }
 
 .text-textbox {
   width: 25vw;
+  max-width: 50vw;
   height: 25vh;
   flex-shrink: 0;
 }
@@ -304,6 +362,7 @@ section {
 .controls {
   display: flex;
   flex-wrap: wrap;
+  justify-content: center;
   gap: 10px;
 }
 
@@ -363,7 +422,7 @@ section {
 }
 
 .highlight {
-  background: hsla(350, 50%, 75%, var(--strength));
+  background: hsla(350, 100%, 75%, var(--strength));
 }
 
 .highlight-hover {
@@ -371,8 +430,7 @@ section {
 }
 
 .tooltip,
-.tooltip-row,
-.tooltip-subrow {
+.tooltip-indent {
   display: flex;
   flex-direction: column;
 }
@@ -381,7 +439,7 @@ section {
   gap: 5px;
 }
 
-.tooltip-subrow {
-  padding-left: 20px;
+.tooltip-indent {
+  padding-left: 10px;
 }
 </style>
