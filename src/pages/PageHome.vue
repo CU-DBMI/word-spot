@@ -62,9 +62,9 @@
           {{ summary.total.toLocaleString() }}
         </span>
 
-        <template v-for="(matches, key) in summary.counts" :key="key">
-          <span>{{ key }}</span>
-          <span>{{ matches.length.toLocaleString() }}</span>
+        <template v-for="([search, matches], key) in summary.counts" :key="key">
+          <span>{{ search }}</span>
+          <span>{{ matches.toLocaleString() }}</span>
         </template>
       </div>
 
@@ -234,7 +234,13 @@ const summary = computed(() => {
     .map(({ matches }) => matches)
     .flat();
   const total = matches.length;
-  const counts = groupBy(matches, "search");
+  const counts = orderBy(
+    Object.entries(groupBy(matches, "search")).map(
+      ([search, matches]) => [search, matches.length] as const
+    ),
+    "[1]",
+    "desc"
+  );
   return { total, counts };
 });
 
@@ -310,10 +316,12 @@ section {
   --cols: 3;
   display: grid;
   grid-template-columns: repeat(calc(2 * var(--cols)), auto);
+  align-content: flex-start;
   gap: 10px 20px;
   width: 100%;
-  min-height: 3lh;
-  height: 120px;
+  min-height: 100px;
+  max-height: max-content;
+  height: 200px;
   padding: 20px;
   overflow-x: auto;
   overflow-y: auto;
