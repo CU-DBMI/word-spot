@@ -1,45 +1,62 @@
 <template>
   <section>
     <div class="input">
-      <h2>Input</h2>
+      <h2>Text</h2>
+
       <AppTextbox
-        ref="inputElement"
-        v-model="input"
-        class="input-textbox"
+        ref="textElement"
+        v-model="text"
+        class="text-textbox"
         placeholder="Text to check"
       />
+
       <div class="controls">
-        <AppButton @click="input = exampleText">Example</AppButton>
+        <AppButton @click="text = exampleText">Example</AppButton>
         <AppUpload
-          :drop-zone="inputElement?.element"
+          :drop-zone="textElement?.element"
           :accept="uploadMimeTypes"
           :tooltip="uploadTooltip"
-          @files="(files) => (input = files[0]?.text ?? '')"
+          @files="(files) => (text = files[0]?.text ?? '')"
         />
       </div>
 
-      <h2>List</h2>
+      <h2>Search</h2>
+
       <AppTextbox
-        ref="listElement"
-        v-model="list"
-        class="list-textbox"
+        ref="searchElement"
+        v-model="search"
+        class="search-textbox"
         placeholder="Phrases to check for"
         v-tooltip="'Comma or newline-separated'"
       />
+
       <div class="controls">
-        <AppButton @click="list = exampleList">Example</AppButton>
+        <AppButton @click="search = exampleSearch">Example</AppButton>
         <AppUpload
-          :drop-zone="listElement?.element"
+          :drop-zone="searchElement?.element"
           :accept="uploadMimeTypes"
           :tooltip="uploadTooltip"
-          @files="(files) => (list = files[0]?.text ?? '')"
+          @files="(files) => (search = files[0]?.text ?? '')"
         />
       </div>
+
+      <label>
+        Exactness
+        <input
+          v-model="exactness"
+          type="range"
+          :min="0"
+          :max="1"
+          :step="0.01"
+        />
+        {{ (100 * exactness).toFixed(0) }}%
+      </label>
     </div>
 
-    <div v-if="output.length" class="output">
+    <div class="output">
       <h2>Summary</h2>
-      <div class="summary">
+
+      <div v-if="highlights.length" class="summary">
         <span>Total Matches</span>
         <span>
           {{ summary.total.toLocaleString() }}
@@ -51,46 +68,54 @@
         </template>
       </div>
 
-      <h2>Checked Text</h2>
-      <p v-for="(paragraph, key) in output" :key="key">
-        <AppTooltip
-          v-for="({ inputText, matches }, key) in paragraph"
-          :key="key"
-          class="match"
-          :style="{
-            background: `hsla(40, 100%, 50%, ${matches.length / maxOverlap})`,
-          }"
-        >
-          <template #default>{{ inputText }}</template>
-          <template v-if="matches.length" #content>
-            <div class="tooltip">
-              <template
-                v-for="({ inputText, listEntry }, key) in matches"
-                :key="key"
-              >
-                <span>"{{ inputText }}"</span>
-                <span>matches</span>
-                <span>"{{ listEntry }}"</span>
-              </template>
-            </div>
-          </template>
-        </AppTooltip>
-      </p>
-    </div>
+      <p v-else class="placeholder">Enter some text</p>
 
-    <div v-else class="output" :style="{ opacity: 0.5 }">Enter some text</div>
+      <h2>Results</h2>
+
+      <template v-if="highlights.length">
+        <p v-for="(paragraph, key) in highlights" :key="key">
+          <AppTooltip
+            v-for="({ text, matches, strength }, key) in paragraph"
+            :key="JSON.stringify({ key, paragraph })"
+            class="match"
+            :style="{
+              background: `hsla(40, 100%, 50%, ${strength / maxStrength})`,
+            }"
+          >
+            <template #default>{{ text }}</template>
+            <template v-if="matches[0]" #content>
+              "{{ matches[0].text }}" matches "{{ matches[0].search }}" ({{
+                (100 * matches[0].score).toFixed(0)
+              }}%)
+            </template>
+          </AppTooltip>
+        </p>
+      </template>
+
+      <p v-else class="placeholder">Enter some text</p>
+    </div>
   </section>
 </template>
 
 <script setup lang="ts">
 import { computed, useTemplateRef } from "vue";
 import { useDebounce, useLocalStorage } from "@vueuse/core";
-import { groupBy, inRange, isEqual, maxBy, orderBy, range } from "lodash";
+import {
+  groupBy,
+  inRange,
+  isEqual,
+  max,
+  maxBy,
+  orderBy,
+  range,
+  sumBy,
+} from "lodash";
 import AppTextbox from "../components/AppTextbox.vue";
 import AppUpload from "../components/AppUpload.vue";
 import AppButton from "../components/AppButton.vue";
 import exampleText from "./example-text.txt?raw";
-import exampleList from "./example-list.txt?raw";
+import exampleSearch from "./example-search.txt?raw";
+import { fuzzySearch, splitWords } from "../util/search";
 
 /** upload settings */
 const uploadMimeTypes = [
@@ -106,62 +131,61 @@ const uploadTooltip =
   "Load text, Word, or PDF file. Or drag & drop file onto textbox.";
 
 /** elements */
-const inputElement = useTemplateRef("inputElement");
-const listElement = useTemplateRef("listElement");
+const textElement = useTemplateRef("textElement");
+const searchElement = useTemplateRef("searchElement");
 
 /** state */
-const input = useLocalStorage("input", "");
-const list = useLocalStorage("list", "");
+const text = useLocalStorage("text", "");
+const search = useLocalStorage("search", "");
+const exactness = useLocalStorage("exactness", 0.5);
 
 /** debounced state */
-const debouncedInput = useDebounce(input, 200);
-const debouncedList = useDebounce(list, 200);
+const debouncedText = useDebounce(text, 200);
+const debouncedSearch = useDebounce(search, 200);
+const debouncedExactness = useDebounce(exactness, 100);
 
-/** split input by paragraph */
-const splitInput = computed(() =>
-  debouncedInput.value.split(/\n+/).filter((paragraph) => paragraph.trim())
+/** split text by paragraph */
+const paragraphs = computed(() =>
+  debouncedText.value.split(/\n+/).filter((paragraph) => paragraph.trim())
 );
-/** split list by separators */
-const splitList = computed(() =>
-  debouncedList.value.split(/[\n,]+/).filter((entry) => entry.trim())
+/** split search by separators */
+const searches = computed(() =>
+  debouncedSearch.value.split(/[\n,]+/).filter((entry) => entry.trim())
 );
 
-/** analyzed output */
-const output = computed(() =>
-  /** for each input paragraph */
-  splitInput.value.map((paragraph) => {
-    const matches = splitList.value
-      /** for each list entry */
-      .map((listEntry) => ({
-        listEntry,
-        /** get all instances of entry in paragraph */
-        matches: [...paragraph.matchAll(new RegExp(listEntry, "gi"))],
-      }))
-      .map(({ listEntry, matches }) =>
-        matches.map((match) => {
-          /** get location of match */
-          const start = match.index;
-          const end = start + listEntry.length;
-          return {
-            inputText: paragraph.slice(start, end),
-            listEntry,
-            start,
-            end,
-          };
-        })
-      )
-      .flat();
+/** fuzzy search matches */
+const paragraphsWithMatches = computed(() => {
+  /** get max word window for fuzzy search */
+  const maxSearchWords =
+    max(searches.value.map((search) => splitWords(search).length)) ?? 1;
 
-    const highlighting = range(0, paragraph.length)
+  /** for each paragraph */
+  return paragraphs.value.map((paragraph) => ({
+    paragraph,
+    matches: fuzzySearch(
+      paragraph,
+      searches.value,
+      maxSearchWords,
+      debouncedExactness.value
+    ),
+  }));
+});
+
+/** highlighted output */
+const highlights = computed(() =>
+  /** for each paragraphs */
+  paragraphsWithMatches.value.map(({ paragraph, matches }) =>
+    /** convert matches into sequentially-renderable highlighted dom elements */
+    range(0, paragraph.length)
       /** for each character in paragraph */
       .map((char) => ({
         char,
-        /** get match ranges that include this char */
+        /** get match highlights that include this char */
         matches:
           /** sort so array order doesn't matter for equality */
           orderBy(
             matches.filter(({ start, end }) => inRange(char, start, end)),
-            /** sort in order of appearance, useful for showing latest match tooltip when hovering overlapping ranges */
+            /** sort in order of appearance, useful for showing latest match tooltip when hovering overlapping highlights */
             "start",
             "desc"
           ),
@@ -172,32 +196,29 @@ const output = computed(() =>
           !isEqual(matches, array[index - 1]?.matches)
       )
       .map(({ char, matches }, index, array) => ({
-        /** get original paragraph text in range */
-        inputText: paragraph.slice(
-          char,
-          array[index + 1]?.char ?? paragraph.length
-        ),
-        /** list of matches associated with range */
+        /** original paragraph text in highlight, to render */
+        text: paragraph.slice(char, array[index + 1]?.char ?? paragraph.length),
+        /** list of matches associated with highlight */
         matches,
-      }));
-
-    return highlighting;
-  })
+        /** sum scores to get "strength" for coloring */
+        strength: sumBy(matches, "score"),
+      }))
+  )
 );
 
-/** output summary info */
+/** summary info */
 const summary = computed(() => {
-  const matches = output.value
-    .map((paragraph) => paragraph.map((range) => range.matches))
-    .flat()
+  const matches = paragraphsWithMatches.value
+    .map(({ matches }) => matches)
     .flat();
-  const counts = groupBy(matches, "listEntry");
-  return { total: matches.length, counts };
+  const total = matches.length;
+  const counts = groupBy(matches, "search");
+  return { total, counts };
 });
 
-/** max number of overlapping ranges */
-const maxOverlap = computed(
-  () => maxBy(output.value.flat(), "matches.length")?.matches.length ?? 0
+/** max highlight strength, for normalizing */
+const maxStrength = computed(
+  () => maxBy(highlights.value.flat(), "strength")?.strength ?? 0
 );
 </script>
 
@@ -231,13 +252,13 @@ section {
   max-height: 100vh;
 }
 
-.input-textbox {
+.text-textbox {
   width: 25vw;
   height: 25vh;
   flex-shrink: 0;
 }
 
-.list-textbox {
+.search-textbox {
   width: 0;
   min-width: 100%;
   flex-grow: 1;
@@ -309,5 +330,9 @@ section {
 
 .tooltip > :nth-child(3n + 2) {
   text-align: center;
+}
+
+.placeholder {
+  color: gray;
 }
 </style>

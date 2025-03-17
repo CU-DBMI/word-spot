@@ -5,6 +5,8 @@ import VueTippy from "vue-tippy";
 import "tippy.js/dist/tippy.css"; // optional for styling
 import "./style.css";
 
+import "./util/search";
+
 const app = createApp(App);
 app.use(router);
 app.use(VueTippy, {
