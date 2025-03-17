@@ -40,7 +40,7 @@
         />
       </div>
 
-      <label>
+      <!-- <label>
         Exactness
         <input
           v-model="exactness"
@@ -50,7 +50,7 @@
           :step="0.01"
         />
         {{ (100 * exactness).toFixed(0) }}%
-      </label>
+      </label> -->
     </div>
 
     <div class="output">
@@ -132,9 +132,9 @@ import exampleText from "@/assets/example-text.txt?raw";
 import AppButton from "@/components/AppButton.vue";
 import AppTextbox from "@/components/AppTextbox.vue";
 import AppUpload from "@/components/AppUpload.vue";
-import { getId } from "@/util/misc";
 import { useScrollable } from "@/util/composables";
-import { fuzzySearch, splitWords } from "@/util/search";
+import { getId } from "@/util/misc";
+import { getMatches, splitWords } from "@/util/search";
 
 /** upload settings */
 const uploadMimeTypes = [
@@ -157,10 +157,12 @@ const summaryElement = useTemplateRef("summaryElement");
 /** scroll indicators */
 useScrollable(summaryElement);
 
+// window.localStorage.clear();
+
 /** state */
 const text = useLocalStorage("text", "");
 const search = useLocalStorage("search", "");
-const exactness = useLocalStorage("exactness", 0.5);
+const exactness = useLocalStorage("exactness", 1);
 const hover = ref(0);
 
 /** debounced state */
@@ -177,7 +179,7 @@ const searches = computed(() =>
   debouncedSearch.value.split(/[\n,]+/).filter((entry) => entry.trim()),
 );
 
-/** paragraphs with fuzzy search matches */
+/** paragraphs with search matches */
 const withMatches = computed(() => {
   /** get max word window for fuzzy search */
   const maxSearchWords =
@@ -186,10 +188,11 @@ const withMatches = computed(() => {
   /** for each paragraph */
   return paragraphs.value.map((paragraph) => ({
     paragraph,
-    matches: fuzzySearch(
+    matches: getMatches(
       paragraph,
       searches.value,
       maxSearchWords,
+      "exact",
       debouncedExactness.value,
     ),
   }));
@@ -346,7 +349,7 @@ section {
 }
 
 .input {
-  box-shadow: var(--shadow);
+  max-height: 100vh;
 }
 
 .text-textbox {
