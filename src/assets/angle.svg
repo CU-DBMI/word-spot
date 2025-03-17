@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-10 -10 20 20">
+  <path
+    fill="none"
+    stroke="COLOR"
+    stroke-width="4"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+    transform="rotate(ROTATE)"
+    d="M -8 5 L 0 -3 L 8 5"
+  />
+</svg>

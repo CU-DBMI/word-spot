@@ -45,7 +45,7 @@
         <input
           v-model="exactness"
           type="range"
-          :min="0"
+          :min="0.05"
           :max="1"
           :step="0.01"
         />
@@ -56,7 +56,7 @@
     <div class="output">
       <h2>Summary</h2>
 
-      <div v-if="highlights.length" class="summary">
+      <div v-if="highlights.length" ref="summaryElement" class="summary">
         <span>Total Matches</span>
         <span>
           {{ summary.total.toLocaleString() }}
@@ -75,18 +75,34 @@
       <template v-if="highlights.length">
         <p v-for="(paragraph, key) in highlights" :key="key">
           <AppTooltip
-            v-for="({ text, matches, strength }, key) in paragraph"
+            v-for="({ text, matches, ids, strength }, key) in paragraph"
             :key="JSON.stringify({ key, paragraph })"
-            class="match"
-            :style="{
-              background: `hsla(40, 100%, 50%, ${strength / maxStrength})`,
-            }"
+            :class="[
+              strength && 'highlight',
+              ids.includes(hover) && 'highlight-hover',
+            ]"
+            :style="{ '--strength': strength / maxStrength }"
+            @mouseenter="setHover(matches)"
+            @mouseleave="clearHover"
           >
             <template #default>{{ text }}</template>
-            <template v-if="matches[0]" #content>
-              "{{ matches[0].text }}" matches "{{ matches[0].search }}" ({{
-                (100 * matches[0].score).toFixed(0)
-              }}%)
+            <template v-if="matches.length" #content>
+              <div class="tooltip">
+                <div
+                  v-for="(value, key) in groupBy(matches, 'text')"
+                  class="tooltip-row"
+                  :key="key"
+                >
+                  <template v-if="value[0]?.id === hover">
+                    <div>"{{ key }}" matches...</div>
+                    <div class="tooltip-subrow">
+                      <div v-for="({ search, score }, key) in value" :key="key">
+                        • "{{ search }}" ({{ (100 * score).toFixed(0) }}%)
+                      </div>
+                    </div>
+                  </template>
+                </div>
+              </div>
             </template>
           </AppTooltip>
         </p>
@@ -98,12 +114,13 @@
 </template>
 
 <script setup lang="ts">
-import { computed, useTemplateRef } from "vue";
+import { computed, ref, useTemplateRef } from "vue";
 import { useDebounce, useLocalStorage } from "@vueuse/core";
 import {
   groupBy,
   inRange,
   isEqual,
+  map,
   max,
   maxBy,
   orderBy,
@@ -116,6 +133,7 @@ import AppButton from "../components/AppButton.vue";
 import exampleText from "./example-text.txt?raw";
 import exampleSearch from "./example-search.txt?raw";
 import { fuzzySearch, splitWords } from "../util/search";
+import { useScrollable } from "../util/composables";
 
 /** upload settings */
 const uploadMimeTypes = [
@@ -133,11 +151,15 @@ const uploadTooltip =
 /** elements */
 const textElement = useTemplateRef("textElement");
 const searchElement = useTemplateRef("searchElement");
+const summaryElement = useTemplateRef("summaryElement");
+
+useScrollable(summaryElement);
 
 /** state */
 const text = useLocalStorage("text", "");
 const search = useLocalStorage("search", "");
 const exactness = useLocalStorage("exactness", 0.5);
+const hover = ref(0);
 
 /** debounced state */
 const debouncedText = useDebounce(text, 200);
@@ -185,9 +207,7 @@ const highlights = computed(() =>
           /** sort so array order doesn't matter for equality */
           orderBy(
             matches.filter(({ start, end }) => inRange(char, start, end)),
-            /** sort in order of appearance, useful for showing latest match tooltip when hovering overlapping highlights */
-            "start",
-            "desc"
+            "start"
           ),
       }))
       .filter(
@@ -199,9 +219,11 @@ const highlights = computed(() =>
         /** original paragraph text in highlight, to render */
         text: paragraph.slice(char, array[index + 1]?.char ?? paragraph.length),
         /** list of matches associated with highlight */
-        matches,
+        matches: orderBy(matches, "score", "desc"),
         /** sum scores to get "strength" for coloring */
         strength: sumBy(matches, "score"),
+        /** ids of contained matches */
+        ids: map(matches, "id"),
       }))
   )
 );
@@ -220,6 +242,13 @@ const summary = computed(() => {
 const maxStrength = computed(
   () => maxBy(highlights.value.flat(), "strength")?.strength ?? 0
 );
+
+type Matches = (typeof highlights.value)[number][number]["matches"];
+
+/** handle hover */
+const setHover = (matches: Matches) =>
+  (hover.value = orderBy(matches, "start", "desc")[0]?.id ?? 0);
+const clearHover = () => (hover.value = 0);
 </script>
 
 <style scoped>
@@ -321,18 +350,30 @@ section {
   }
 }
 
-.tooltip {
-  display: grid;
-  grid-template-columns: repeat(3, auto);
-  align-items: center;
-  gap: 10px 20px;
-}
-
-.tooltip > :nth-child(3n + 2) {
-  text-align: center;
-}
-
 .placeholder {
   color: gray;
+}
+
+.highlight {
+  background: hsla(350, 50%, 75%, var(--strength));
+}
+
+.highlight-hover {
+  box-shadow: 0 2px 0 var(--theme);
+}
+
+.tooltip,
+.tooltip-row,
+.tooltip-subrow {
+  display: flex;
+  flex-direction: column;
+}
+
+.tooltip {
+  gap: 5px;
+}
+
+.tooltip-subrow {
+  padding-left: 20px;
 }
 </style>

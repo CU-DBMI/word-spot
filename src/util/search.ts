@@ -1,5 +1,5 @@
 import damerauLevenshtein from "damerau-levenshtein";
-import { map } from "lodash";
+import { map, uniqueId } from "lodash";
 
 /** reference:
  * https://freedium.cfd/https://marian-caikovski.medium.com/fuzzy-search-for-keywords-in-free-text-f732ecdc9519
@@ -8,7 +8,7 @@ import { map } from "lodash";
 
 /** split text into words */
 export const splitWords = (text: string) =>
-  [...text.matchAll(/[^\s]+/dgu)].map((match) => ({
+  [...text.matchAll(/[\p{L}\p{N}-]+/dgu)].map((match) => ({
     word: match[0],
     start: match.indices?.[0]?.[0] ?? 0,
     end: match.indices?.[0]?.[1] ?? 0,
@@ -35,6 +35,7 @@ export const fuzzySearch = (
     score: number;
     start: number;
     end: number;
+    id: number;
   }[] = [];
 
   /** split paragraph into separate words */
@@ -61,6 +62,7 @@ export const fuzzySearch = (
         let steps = damerauLevenshtein(text, search).steps;
         /** calculate score */
         const score = decay(steps);
+
         if (score >= threshold)
           matches.push({
             text,
@@ -68,6 +70,7 @@ export const fuzzySearch = (
             score,
             start,
             end,
+            id: 1 + Number(uniqueId()),
           });
       }
     }

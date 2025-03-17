@@ -12,7 +12,7 @@ button {
 }
 
 button:hover {
-  background: slategray;
+  background: var(--gray);
   color: white;
 }
 </style>
