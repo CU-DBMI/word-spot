@@ -13,8 +13,8 @@
 <script setup lang="ts">
 import { useEventListener } from "@vueuse/core";
 import { ref, useTemplateRef, watchEffect } from "vue";
-import { parsePdf, parseWordDoc } from "../util/upload";
-import AppButton from "./AppButton.vue";
+import { parsePdf, parseWordDoc } from "@/util/upload";
+import AppButton from "@/components/AppButton.vue";
 
 type Props = {
   dropZone?: HTMLElement | null;

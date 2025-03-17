@@ -94,7 +94,7 @@
                   <div
                     v-for="(match, key) in slice.highlights[0].matches.slice(
                       0,
-                      5
+                      5,
                     )"
                     :key="key"
                   >
@@ -116,7 +116,6 @@
 
 <script setup lang="ts">
 import { computed, ref, useTemplateRef } from "vue";
-import { useDebounce, useLocalStorage } from "@vueuse/core";
 import {
   groupBy,
   inRange,
@@ -127,14 +126,15 @@ import {
   range,
   sumBy,
 } from "lodash";
-import AppTextbox from "../components/AppTextbox.vue";
-import AppUpload from "../components/AppUpload.vue";
-import AppButton from "../components/AppButton.vue";
-import { fuzzySearch, splitWords } from "../util/search";
-import { useScrollable } from "../util/composables";
-import exampleText from "./example-text.txt?raw";
-import exampleSearch from "./example-search.txt?raw";
-import { getId } from "../util/misc";
+import { useDebounce, useLocalStorage } from "@vueuse/core";
+import exampleSearch from "@/assets/example-search.txt?raw";
+import exampleText from "@/assets/example-text.txt?raw";
+import AppButton from "@/components/AppButton.vue";
+import AppTextbox from "@/components/AppTextbox.vue";
+import AppUpload from "@/components/AppUpload.vue";
+import { getId } from "@/util/misc";
+import { useScrollable } from "@/util/composables";
+import { fuzzySearch, splitWords } from "@/util/search";
 
 /** upload settings */
 const uploadMimeTypes = [
@@ -170,11 +170,11 @@ const debouncedExactness = useDebounce(exactness, 100);
 
 /** split text by paragraph */
 const paragraphs = computed(() =>
-  debouncedText.value.split(/\n+/).filter((paragraph) => paragraph.trim())
+  debouncedText.value.split(/\n+/).filter((paragraph) => paragraph.trim()),
 );
 /** split search by separators */
 const searches = computed(() =>
-  debouncedSearch.value.split(/[\n,]+/).filter((entry) => entry.trim())
+  debouncedSearch.value.split(/[\n,]+/).filter((entry) => entry.trim()),
 );
 
 /** paragraphs with fuzzy search matches */
@@ -190,7 +190,7 @@ const withMatches = computed(() => {
       paragraph,
       searches.value,
       maxSearchWords,
-      debouncedExactness.value
+      debouncedExactness.value,
     ),
   }));
 });
@@ -209,21 +209,24 @@ const withSlices = computed(() => {
             orderBy(
               /** get match highlights that include this char */
               matches.filter(({ start, end }) => inRange(char, start, end)),
-              /** put slices that start later first, for benefit of hover and tooltip */
+              /**
+               * put slices that start later first, for benefit of hover and
+               * tooltip
+               */
               "start",
-              "desc"
+              "desc",
             ),
         }))
         .filter(
           /** remove char entries that are same as previous */
           ({ matches }, index, array) =>
-            !isEqual(matches, array[index - 1]?.matches)
+            !isEqual(matches, array[index - 1]?.matches),
         )
         .map(({ char, matches }, index, array) => {
           /** original slice of paragraph to render */
           const original = paragraph.slice(
             char,
-            array[index + 1]?.char ?? paragraph.length
+            array[index + 1]?.char ?? paragraph.length,
           );
 
           /** get unique id for slice */
@@ -238,7 +241,10 @@ const withSlices = computed(() => {
               /** sort stronger matches first */
               fullMatches = orderBy(fullMatches, "score", "desc");
 
-              /** only keep fields that we need, and that are different for every match */
+              /**
+               * only keep fields that we need, and that are different for every
+               * match
+               */
               const matches = map(fullMatches, ({ search, score }) => ({
                 search,
                 score,
@@ -250,7 +256,7 @@ const withSlices = computed(() => {
               const id = getId({ paragraphIndex, start, end, highlight });
 
               return { id, ...highlight };
-            }
+            },
           );
 
           /** extract out highlight ids for convenience */
@@ -260,7 +266,7 @@ const withSlices = computed(() => {
           const strength = 0;
 
           return { id, original, highlights, highlightIds, strength };
-        })
+        }),
   );
 
   /** determine max # of highlights that will ever overlap each other */
@@ -287,10 +293,10 @@ const summary = computed(() => {
   const total = matches.length;
   const counts = orderBy(
     Object.entries(groupBy(matches, "search")).map(
-      ([search, matches]) => [search, matches.length] as const
+      ([search, matches]) => [search, matches.length] as const,
     ),
     "[1]",
-    "desc"
+    "desc",
   );
   return { total, counts };
 });
@@ -325,8 +331,8 @@ section {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 20px;
   padding: 40px;
+  gap: 20px;
 }
 
 .input > :first-child,
@@ -340,22 +346,21 @@ section {
 }
 
 .input {
-  max-height: 100vh;
   box-shadow: var(--shadow);
 }
 
 .text-textbox {
+  flex-shrink: 0;
   width: 25vw;
   max-width: 50vw;
   height: 25vh;
-  flex-shrink: 0;
 }
 
 .search-textbox {
-  width: 0;
-  min-width: 100%;
   flex-grow: 1;
   flex-shrink: 0;
+  width: 0;
+  min-width: 100%;
   resize: vertical;
 }
 
@@ -376,16 +381,16 @@ section {
   display: grid;
   grid-template-columns: repeat(calc(2 * var(--cols)), auto);
   align-content: flex-start;
-  gap: 10px 20px;
   width: 100%;
+  height: 200px;
   min-height: 100px;
   max-height: max-content;
-  height: 200px;
   padding: 20px;
   overflow-x: auto;
   overflow-y: auto;
-  box-shadow: var(--shadow);
+  gap: 10px 20px;
   border-radius: var(--rounded);
+  box-shadow: var(--shadow);
   resize: vertical;
 }
 

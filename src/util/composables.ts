@@ -1,10 +1,10 @@
-import { type useTemplateRef, nextTick, onMounted, watchEffect } from "vue";
+import { nextTick, onMounted, watchEffect, type useTemplateRef } from "vue";
 import {
   useMutationObserver,
   useResizeObserver,
   useScroll,
 } from "@vueuse/core";
-import icon from "../assets/angle.svg";
+import icon from "@/assets/angle.svg";
 
 type TemplateRef = ReturnType<typeof useTemplateRef<HTMLElement>>;
 
@@ -12,7 +12,7 @@ type TemplateRef = ReturnType<typeof useTemplateRef<HTMLElement>>;
 export const useScrollable = (
   element: TemplateRef,
   color = "#80808040",
-  size = 20
+  size = 20,
 ) => {
   const { arrivedState } = useScroll(element);
 
@@ -33,7 +33,7 @@ export const useScrollable = (
     ).map(([arrived, direction]) =>
       arrived
         ? `linear-gradient(to ${direction}, ${color}, transparent ${size}px)`
-        : ""
+        : "",
     );
 
     /** image layers */

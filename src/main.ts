@@ -1,7 +1,7 @@
 import { createApp } from "vue";
+import VueTippy from "vue-tippy";
 import App from "./App.vue";
 import { router } from "./router";
-import VueTippy from "vue-tippy";
 import "tippy.js/dist/tippy.css";
 import "./style.css";
 
