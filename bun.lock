@@ -12,6 +12,7 @@
         "vue": "^3.5.13",
         "vue-router": "4",
         "vue-tippy": "v6",
+        "workerpool": "^9.2.0",
       },
       "devDependencies": {
         "@ianvs/prettier-plugin-sort-imports": "^4.4.1",
@@ -420,6 +421,8 @@
     "vue-tippy": ["vue-tippy@6.6.0", "", { "dependencies": { "tippy.js": "^6.3.7" }, "peerDependencies": { "vue": "^3.2.0" } }, "sha512-ISRIUQDlcEP05K1nCbvlVcd8yuWS6S3dI91qD0A2slgtwwWjih8Fn9Aymq4SNaHQsdiP5+MLRPZVDxFjKMPgKA=="],
 
     "vue-tsc": ["vue-tsc@2.2.8", "", { "dependencies": { "@volar/typescript": "~2.4.11", "@vue/language-core": "2.2.8" }, "peerDependencies": { "typescript": ">=5.0.0" }, "bin": { "vue-tsc": "./bin/vue-tsc.js" } }, "sha512-jBYKBNFADTN+L+MdesNX/TB3XuDSyaWynKMDgR+yCSln0GQ9Tfb7JS2lr46s2LiFUT1WsmfWsSvIElyxzOPqcQ=="],
+
+    "workerpool": ["workerpool@9.2.0", "", {}, "sha512-PKZqBOCo6CYkVOwAxWxQaSF2Fvb5Iv2fCeTP7buyWI2GiynWr46NcXSgK/idoV6e60dgCBfgYc+Un3HMvmqP8w=="],
 
     "xmlbuilder": ["xmlbuilder@10.1.1", "", {}, "sha512-OyzrcFLL/nb6fMGHbiRDuPup9ljBycsdCypwuyg5AAHvyWzGfChJpCXMG88AGTIMFhGZ9RccFN1e6lhg3hkwKg=="],
   }

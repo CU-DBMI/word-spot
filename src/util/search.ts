@@ -1,5 +1,6 @@
-import damerauLevenshtein from "damerau-levenshtein";
+import distance from "damerau-levenshtein";
 import { map } from "lodash";
+import { worker } from "workerpool";
 
 type Matches = {
   text: string;
@@ -34,8 +35,7 @@ export const getMatches = (
   text: string,
   searches: string[],
   wordWindow = 1,
-  method: "fuzzy" | "exact" = "exact",
-  threshold = 0.5,
+  threshold = 1,
 ) => {
   /** normalize strings for comparison */
   text = text.toLowerCase();
@@ -66,7 +66,7 @@ export const getMatches = (
 
       /** for each search term */
       for (const search of searches) {
-        if (method === "exact") {
+        if (threshold >= 1) {
           if (text === search) {
             matches.push({
               text,
@@ -78,7 +78,7 @@ export const getMatches = (
           }
         } else {
           /** calculate distance between strings */
-          let steps = damerauLevenshtein(text, search).steps;
+          let steps = distance(text, search).steps;
           /** calculate score */
           const score = decay(steps);
           if (score >= threshold)
@@ -96,3 +96,7 @@ export const getMatches = (
 
   return matches;
 };
+
+worker({ getMatches });
+
+export type GetMatches = typeof getMatches;

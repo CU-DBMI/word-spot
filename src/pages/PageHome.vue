@@ -40,23 +40,27 @@
         />
       </div>
 
-      <!-- <label>
+      <label>
         Exactness
         <input
-          v-model="exactness"
+          v-model.number="exactness"
           type="range"
           :min="0.05"
           :max="1"
           :step="0.01"
         />
         {{ (100 * exactness).toFixed(0) }}%
-      </label> -->
+      </label>
     </div>
 
     <div class="output">
       <h2>Summary</h2>
 
-      <div v-if="summary.total" ref="summaryElement" class="summary">
+      <div
+        v-if="!checkingProgress && summary.total"
+        ref="summaryElement"
+        class="summary"
+      >
         <span>Total Matches</span>
         <span>
           {{ summary.total.toLocaleString() }}
@@ -68,12 +72,15 @@
         </template>
       </div>
 
+      <p v-if="!text.length" class="placeholder">Enter some text</p>
       <p v-if="!search.length" class="placeholder">Enter a search</p>
-      <p v-else-if="!summary.total" class="placeholder">No matches</p>
+      <p v-if="checkingProgress" class="placeholder">
+        Checking {{ (100 * checkingProgress).toFixed() }}%
+      </p>
 
       <h2>Results</h2>
 
-      <template v-if="withSlices.length">
+      <template v-if="!checkingProgress && withSlices.length">
         <p v-for="(paragraph, key) in withSlices" :key="key">
           <AppTooltip
             v-for="slice in paragraph"
@@ -109,7 +116,10 @@
         </p>
       </template>
 
-      <p v-else class="placeholder">Enter some text</p>
+      <p v-if="!text.length" class="placeholder">Enter some text</p>
+      <p v-if="checkingProgress" class="placeholder">
+        Checking {{ (100 * checkingProgress).toFixed() }}%
+      </p>
     </div>
   </section>
 </template>
@@ -126,7 +136,8 @@ import {
   range,
   sumBy,
 } from "lodash";
-import { useDebounce, useLocalStorage } from "@vueuse/core";
+import { pool } from "workerpool";
+import { asyncComputed, useDebounce, useLocalStorage } from "@vueuse/core";
 import exampleSearch from "@/assets/example-search.txt?raw";
 import exampleText from "@/assets/example-text.txt?raw";
 import AppButton from "@/components/AppButton.vue";
@@ -134,7 +145,8 @@ import AppTextbox from "@/components/AppTextbox.vue";
 import AppUpload from "@/components/AppUpload.vue";
 import { useScrollable } from "@/util/composables";
 import { getId } from "@/util/misc";
-import { getMatches, splitWords } from "@/util/search";
+import { splitWords, type GetMatches } from "@/util/search";
+import SearchWorker from "@/util/search?worker&url";
 
 /** upload settings */
 const uploadMimeTypes = [
@@ -164,6 +176,7 @@ const text = useLocalStorage("text", "");
 const search = useLocalStorage("search", "");
 const exactness = useLocalStorage("exactness", 1);
 const hover = ref(0);
+const checkingProgress = ref(0);
 
 /** debounced state */
 const debouncedText = useDebounce(text, 200);
@@ -179,24 +192,48 @@ const searches = computed(() =>
   debouncedSearch.value.split(/[\n,]+/).filter((entry) => entry.trim()),
 );
 
+/** pool of web workers to do searching on multiple cores */
+const searchPool = pool(SearchWorker, {
+  /** https://github.com/josdejong/workerpool/issues/341#issuecomment-2046514842 */
+  workerOpts: { type: import.meta.env.PROD ? undefined : "module" },
+});
+
 /** paragraphs with search matches */
-const withMatches = computed(() => {
+const withMatches = asyncComputed(async () => {
   /** get max word window for fuzzy search */
   const maxSearchWords =
     max(searches.value.map((search) => splitWords(search).length)) ?? 1;
 
-  /** for each paragraph */
-  return paragraphs.value.map((paragraph) => ({
-    paragraph,
-    matches: getMatches(
-      paragraph,
-      searches.value,
-      maxSearchWords,
-      "exact",
-      debouncedExactness.value,
-    ),
-  }));
-});
+  /** use dependencies synchronously so they can be auto-tracked */
+  const text = paragraphs.value;
+  const threshold = debouncedExactness.value;
+
+  /** reset */
+  await searchPool.terminate(true, 0);
+  checkingProgress.value = 0;
+
+  const results = await Promise.all(
+    /** for each paragraph */
+    text.map(async (paragraph) => {
+      /** start new web worker to get search results */
+      const matches = await searchPool.exec<GetMatches>("getMatches", [
+        paragraph,
+        searches.value,
+        maxSearchWords,
+        threshold,
+      ]);
+      /** update progress */
+      checkingProgress.value =
+        1 - searchPool.stats().pendingTasks / paragraphs.value.length;
+      return { paragraph, matches };
+    }),
+  );
+
+  /** reset */
+  checkingProgress.value = 0;
+
+  return results;
+}, []);
 
 /** paragraphs with highlighted slices */
 const withSlices = computed(() => {
@@ -349,6 +386,8 @@ section {
 }
 
 .input {
+  position: sticky;
+  top: 0;
   max-height: 100vh;
 }
 
