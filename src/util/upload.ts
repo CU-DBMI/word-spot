@@ -1,6 +1,7 @@
 import { extractRawText } from "mammoth";
-import workerSrc from "pdfjs-dist/build/pdf.worker?worker&url";
 import * as pdfjs from "pdfjs-dist";
+import workerSrc from "pdfjs-dist/build/pdf.worker?worker&url";
+import { worker } from "workerpool";
 
 /** https://github.com/mozilla/pdf.js/issues/10478#issuecomment-2242664642 */
 pdfjs.GlobalWorkerOptions.workerSrc = workerSrc;
@@ -21,3 +22,5 @@ export const parsePdf = async (buffer: ArrayBuffer) => {
         .join(" ") + "\n";
   return text;
 };
+
+worker({ parseWordDoc, parsePdf });

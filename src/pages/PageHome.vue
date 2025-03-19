@@ -70,17 +70,9 @@
 
       <p v-if="!text.length" class="placeholder">Enter some text</p>
       <p v-if="!search.length" class="placeholder">Enter a search</p>
-      <p
-        v-if="!summary.total && !exactProgress && !fuzzyProgress"
-        class="placeholder"
-      >
-        No matches
-      </p>
-      <p v-if="exactProgress" class="placeholder">
-        Checking for exact matches {{ (100 * exactProgress).toFixed() }}%
-      </p>
-      <p v-if="fuzzyProgress" class="placeholder">
-        Checking for loose matches {{ (100 * fuzzyProgress).toFixed() }}%
+      <p v-if="!summary.total && !progress" class="placeholder">No matches</p>
+      <p v-if="progress" class="placeholder">
+        Checking {{ (100 * progress).toFixed() }}%
       </p>
 
       <h2>Results</h2>
@@ -119,25 +111,15 @@
       </template>
 
       <p v-if="!text.length" class="placeholder">Enter some text</p>
-      <p v-if="exactProgress" class="placeholder">
-        Checking for exact matches {{ (100 * exactProgress).toFixed() }}%
-      </p>
-      <p v-if="fuzzyProgress" class="placeholder">
-        Checking for loose matches {{ (100 * fuzzyProgress).toFixed() }}%
+      <p v-if="progress" class="placeholder">
+        Checking {{ (100 * progress).toFixed() }}%
       </p>
     </div>
   </section>
 </template>
 
 <script setup lang="ts">
-import {
-  computed,
-  ref,
-  shallowRef,
-  useTemplateRef,
-  watch,
-  type Ref,
-} from "vue";
+import { computed, ref, shallowRef, useTemplateRef, watch } from "vue";
 import {
   groupBy,
   inRange,
@@ -148,7 +130,6 @@ import {
   range,
   sumBy,
 } from "lodash";
-import { pool } from "workerpool";
 import { useDebounce, useLocalStorage } from "@vueuse/core";
 import exampleSearch from "@/assets/example-search.txt?raw";
 import exampleText from "@/assets/example-text.txt?raw";
@@ -156,8 +137,10 @@ import AppButton from "@/components/AppButton.vue";
 import AppTextbox from "@/components/AppTextbox.vue";
 import AppUpload from "@/components/AppUpload.vue";
 import { useScrollable } from "@/util/composables";
+import { getPool } from "@/util/pool";
 import { splitWords } from "@/util/search";
-import type { GetMatches, Matches } from "@/util/search";
+import type { Matches } from "@/util/search";
+import * as SearchAPI from "@/util/search";
 import SearchWorker from "@/util/search?worker&url";
 
 /** upload settings */
@@ -186,8 +169,7 @@ const text = useLocalStorage("text", "");
 const search = useLocalStorage("search", "");
 const exactness = ref(1);
 const hover = ref("");
-const exactProgress = ref(0);
-const fuzzyProgress = ref(0);
+const progress = ref(0);
 
 /** debounced state */
 const debouncedText = useDebounce(text, 1000);
@@ -208,48 +190,8 @@ const wordWindow = computed(
   () => max(searches.value.map((search) => splitWords(search).length)) ?? 1,
 );
 
-/** pool of web workers to do searching on multiple cores */
-const getPool = () =>
-  pool(SearchWorker, {
-    /** https://github.com/josdejong/workerpool/issues/341#issuecomment-2046514842 */
-    workerOpts: { type: import.meta.env.PROD ? undefined : "module" },
-  });
-const exactSearchPool = getPool();
-const fuzzySearchPool = getPool();
-
-/** get paragraphs with search matches */
-const getMatches = async (
-  exact: boolean,
-  pool: ReturnType<typeof getPool>,
-  progress: Ref<number>,
-) => {
-  /** reset */
-  await pool.terminate(true, 0);
-  progress.value = 0;
-
-  let done = 0;
-
-  const matches = await Promise.all(
-    /** for each paragraph */
-    paragraphs.value.map(async (paragraph) => {
-      /** start new web worker to get search results */
-      const matches = await pool.exec<GetMatches>("getMatches", [
-        paragraph,
-        searches.value,
-        wordWindow.value,
-        exact,
-      ]);
-      /** update progress */
-      progress.value = done++ / paragraphs.value.length;
-      return { paragraph, matches };
-    }),
-  );
-
-  /** reset */
-  progress.value = 0;
-
-  return matches;
-};
+/** whether to use exact search */
+const exact = computed(() => debouncedExactness.value >= 1);
 
 type WithMatches = { paragraph: string; matches: Matches }[];
 
@@ -260,37 +202,58 @@ const fuzzyMatches = shallowRef<WithMatches>([]);
 /** matches, depending on threshold */
 const matches = shallowRef<WithMatches>([]);
 
-/** update exact matches */
 watch(
+  /** when inputs change */
   [paragraphs, searches, wordWindow],
   () => {
+    /** reset matches */
     exactMatches.value = [];
-    getMatches(true, exactSearchPool, exactProgress).then(
-      (matches) => (exactMatches.value = matches),
-    );
-  },
-  { immediate: true },
-);
-
-/** if user has never wanted non-exact matches, don't run fuzzy matches */
-const fuzzyEnabled = ref(false);
-watch(
-  debouncedExactness,
-  () => {
-    if (debouncedExactness.value < 1) fuzzyEnabled.value = true;
-  },
-  { immediate: true },
-);
-
-/** update fuzzy matches */
-watch(
-  [paragraphs, searches, wordWindow, fuzzyEnabled],
-  () => {
     fuzzyMatches.value = [];
-    if (fuzzyEnabled.value)
-      getMatches(false, fuzzySearchPool, fuzzyProgress).then(
-        (matches) => (fuzzyMatches.value = matches),
-      );
+  },
+  { immediate: true },
+);
+
+/** make pool of webworkers */
+const { run, cleanup } = getPool<typeof SearchAPI>(SearchWorker);
+
+/** update matches */
+watch(
+  [paragraphs, searches, wordWindow, exact, exactMatches, fuzzyMatches],
+  async () => {
+    await cleanup();
+
+    /** if matches already exist, don't recalculate */
+    if (exact.value && exactMatches.value.length) return;
+    if (!exact.value && fuzzyMatches.value.length) return;
+
+    /** progress */
+    progress.value = 0;
+    let done = 0;
+
+    const matches =
+      (await Promise.all(
+        /** for each paragraph */
+        paragraphs.value.map(async (paragraph) => {
+          /** get search results */
+          const matches = await run(
+            "getMatches",
+            paragraph,
+            searches.value,
+            wordWindow.value,
+            exact.value,
+          );
+          /** update progress */
+          progress.value = done++ / paragraphs.value.length;
+          return { paragraph, matches };
+        }),
+      ).catch(console.warn)) ?? [];
+
+    /** progress */
+    progress.value = 0;
+
+    /** set appropriate matches */
+    if (exact.value) exactMatches.value = matches;
+    else fuzzyMatches.value = matches;
   },
   { immediate: true },
 );
@@ -299,18 +262,16 @@ watch(
 watch(
   [exactMatches, fuzzyMatches, debouncedExactness],
   () => {
-    matches.value = (
-      debouncedExactness.value < 1
-        ? /** if user wants them and they're ready, use fuzzy matches */
-          fuzzyMatches.value
-        : /** otherwise use exact matches */
-          exactMatches.value
-    ).map(({ paragraph, matches }) => ({
-      paragraph,
-      matches: matches
+    matches.value =
+      /** which matches to use */
+      (debouncedExactness.value < 1 ? fuzzyMatches.value : exactMatches.value)
         /** remove matches below threshold */
-        .filter((match) => match.score >= debouncedExactness.value),
-    }));
+        .map(({ paragraph, matches }) => ({
+          paragraph,
+          matches: matches.filter(
+            (match) => match.score >= debouncedExactness.value,
+          ),
+        }));
   },
   { immediate: true },
 );
