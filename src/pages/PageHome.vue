@@ -45,7 +45,7 @@
         <input
           v-model.number="exactness"
           type="range"
-          :min="0.05"
+          :min="0"
           :max="1"
           :step="0.01"
         />
@@ -56,11 +56,7 @@
     <div class="output">
       <h2>Summary</h2>
 
-      <div
-        v-if="!checkingProgress && summary.total"
-        ref="summaryElement"
-        class="summary"
-      >
+      <div ref="summaryElement" v-if="summary.total" class="summary">
         <span>Total Matches</span>
         <span>
           {{ summary.total.toLocaleString() }}
@@ -74,14 +70,23 @@
 
       <p v-if="!text.length" class="placeholder">Enter some text</p>
       <p v-if="!search.length" class="placeholder">Enter a search</p>
-      <p v-if="checkingProgress" class="placeholder">
-        Checking {{ (100 * checkingProgress).toFixed() }}%
+      <p
+        v-if="!summary.total && !exactProgress && !fuzzyProgress"
+        class="placeholder"
+      >
+        No matches
+      </p>
+      <p v-if="exactProgress" class="placeholder">
+        Checking for exact matches {{ (100 * exactProgress).toFixed() }}%
+      </p>
+      <p v-if="fuzzyProgress" class="placeholder">
+        Checking for loose matches {{ (100 * fuzzyProgress).toFixed() }}%
       </p>
 
       <h2>Results</h2>
 
-      <template v-if="!checkingProgress && withSlices.length">
-        <p v-for="(paragraph, key) in withSlices" :key="key">
+      <template v-if="slices.length">
+        <p v-for="(paragraph, key) in slices" :key="key">
           <AppTooltip
             v-for="slice in paragraph"
             :key="slice.id"
@@ -99,10 +104,7 @@
                 <div>"{{ slice.highlights[0].text }}" matches...</div>
                 <div class="tooltip-indent">
                   <div
-                    v-for="(match, key) in slice.highlights[0].matches.slice(
-                      0,
-                      5,
-                    )"
+                    v-for="(match, key) in slice.highlights[0].matches"
                     :key="key"
                   >
                     • "{{ match.search }}" ({{
@@ -117,15 +119,25 @@
       </template>
 
       <p v-if="!text.length" class="placeholder">Enter some text</p>
-      <p v-if="checkingProgress" class="placeholder">
-        Checking {{ (100 * checkingProgress).toFixed() }}%
+      <p v-if="exactProgress" class="placeholder">
+        Checking for exact matches {{ (100 * exactProgress).toFixed() }}%
+      </p>
+      <p v-if="fuzzyProgress" class="placeholder">
+        Checking for loose matches {{ (100 * fuzzyProgress).toFixed() }}%
       </p>
     </div>
   </section>
 </template>
 
 <script setup lang="ts">
-import { computed, ref, useTemplateRef } from "vue";
+import {
+  computed,
+  ref,
+  shallowRef,
+  useTemplateRef,
+  watch,
+  type Ref,
+} from "vue";
 import {
   groupBy,
   inRange,
@@ -137,15 +149,15 @@ import {
   sumBy,
 } from "lodash";
 import { pool } from "workerpool";
-import { asyncComputed, useDebounce, useLocalStorage } from "@vueuse/core";
+import { useDebounce, useLocalStorage } from "@vueuse/core";
 import exampleSearch from "@/assets/example-search.txt?raw";
 import exampleText from "@/assets/example-text.txt?raw";
 import AppButton from "@/components/AppButton.vue";
 import AppTextbox from "@/components/AppTextbox.vue";
 import AppUpload from "@/components/AppUpload.vue";
 import { useScrollable } from "@/util/composables";
-import { getId } from "@/util/misc";
-import { splitWords, type GetMatches } from "@/util/search";
+import { splitWords } from "@/util/search";
+import type { GetMatches, Matches } from "@/util/search";
 import SearchWorker from "@/util/search?worker&url";
 
 /** upload settings */
@@ -169,19 +181,18 @@ const summaryElement = useTemplateRef("summaryElement");
 /** scroll indicators */
 useScrollable(summaryElement);
 
-// window.localStorage.clear();
-
 /** state */
 const text = useLocalStorage("text", "");
 const search = useLocalStorage("search", "");
-const exactness = useLocalStorage("exactness", 1);
-const hover = ref(0);
-const checkingProgress = ref(0);
+const exactness = ref(1);
+const hover = ref("");
+const exactProgress = ref(0);
+const fuzzyProgress = ref(0);
 
 /** debounced state */
-const debouncedText = useDebounce(text, 200);
-const debouncedSearch = useDebounce(search, 200);
-const debouncedExactness = useDebounce(exactness, 100);
+const debouncedText = useDebounce(text, 1000);
+const debouncedSearch = useDebounce(search, 1000);
+const debouncedExactness = useDebounce(exactness, 500);
 
 /** split text by paragraph */
 const paragraphs = computed(() =>
@@ -192,121 +203,198 @@ const searches = computed(() =>
   debouncedSearch.value.split(/[\n,]+/).filter((entry) => entry.trim()),
 );
 
+/** get max word window forsearch */
+const wordWindow = computed(
+  () => max(searches.value.map((search) => splitWords(search).length)) ?? 1,
+);
+
 /** pool of web workers to do searching on multiple cores */
-const searchPool = pool(SearchWorker, {
-  /** https://github.com/josdejong/workerpool/issues/341#issuecomment-2046514842 */
-  workerOpts: { type: import.meta.env.PROD ? undefined : "module" },
-});
+const getPool = () =>
+  pool(SearchWorker, {
+    /** https://github.com/josdejong/workerpool/issues/341#issuecomment-2046514842 */
+    workerOpts: { type: import.meta.env.PROD ? undefined : "module" },
+  });
+const exactSearchPool = getPool();
+const fuzzySearchPool = getPool();
 
-/** paragraphs with search matches */
-const withMatches = asyncComputed(async () => {
-  /** get max word window for fuzzy search */
-  const maxSearchWords =
-    max(searches.value.map((search) => splitWords(search).length)) ?? 1;
-
-  /** use dependencies synchronously so they can be auto-tracked */
-  const text = paragraphs.value;
-  const threshold = debouncedExactness.value;
-
+/** get paragraphs with search matches */
+const getMatches = async (
+  exact: boolean,
+  pool: ReturnType<typeof getPool>,
+  progress: Ref<number>,
+) => {
   /** reset */
-  await searchPool.terminate(true, 0);
-  checkingProgress.value = 0;
+  await pool.terminate(true, 0);
+  progress.value = 0;
 
-  const results = await Promise.all(
+  let done = 0;
+
+  const matches = await Promise.all(
     /** for each paragraph */
-    text.map(async (paragraph) => {
+    paragraphs.value.map(async (paragraph) => {
       /** start new web worker to get search results */
-      const matches = await searchPool.exec<GetMatches>("getMatches", [
+      const matches = await pool.exec<GetMatches>("getMatches", [
         paragraph,
         searches.value,
-        maxSearchWords,
-        threshold,
+        wordWindow.value,
+        exact,
       ]);
       /** update progress */
-      checkingProgress.value =
-        1 - searchPool.stats().pendingTasks / paragraphs.value.length;
+      progress.value = done++ / paragraphs.value.length;
       return { paragraph, matches };
     }),
   );
 
   /** reset */
-  checkingProgress.value = 0;
+  progress.value = 0;
 
-  return results;
-}, []);
+  return matches;
+};
+
+type WithMatches = { paragraph: string; matches: Matches }[];
+
+/** paragraphs with exact search matches */
+const exactMatches = shallowRef<WithMatches>([]);
+/** paragraphs with fuzzy search matches */
+const fuzzyMatches = shallowRef<WithMatches>([]);
+/** matches, depending on threshold */
+const matches = shallowRef<WithMatches>([]);
+
+/** update exact matches */
+watch(
+  [paragraphs, searches, wordWindow],
+  () => {
+    exactMatches.value = [];
+    getMatches(true, exactSearchPool, exactProgress).then(
+      (matches) => (exactMatches.value = matches),
+    );
+  },
+  { immediate: true },
+);
+
+/** if user has never wanted non-exact matches, don't run fuzzy matches */
+const fuzzyEnabled = ref(false);
+watch(
+  debouncedExactness,
+  () => {
+    if (debouncedExactness.value < 1) fuzzyEnabled.value = true;
+  },
+  { immediate: true },
+);
+
+/** update fuzzy matches */
+watch(
+  [paragraphs, searches, wordWindow, fuzzyEnabled],
+  () => {
+    fuzzyMatches.value = [];
+    if (fuzzyEnabled.value)
+      getMatches(false, fuzzySearchPool, fuzzyProgress).then(
+        (matches) => (fuzzyMatches.value = matches),
+      );
+  },
+  { immediate: true },
+);
+
+/** update matches */
+watch(
+  [exactMatches, fuzzyMatches, debouncedExactness],
+  () => {
+    matches.value = (
+      debouncedExactness.value < 1
+        ? /** if user wants them and they're ready, use fuzzy matches */
+          fuzzyMatches.value
+        : /** otherwise use exact matches */
+          exactMatches.value
+    ).map(({ paragraph, matches }) => ({
+      paragraph,
+      matches: matches
+        /** remove matches below threshold */
+        .filter((match) => match.score >= debouncedExactness.value),
+    }));
+  },
+  { immediate: true },
+);
 
 /** paragraphs with highlighted slices */
-const withSlices = computed(() => {
-  const paragraphs = withMatches.value.map(
-    ({ paragraph, matches }, paragraphIndex) =>
+const slices = computed(() => {
+  /** unique id for this computation */
+  const comp = Math.random();
+
+  /** match limit per paragraph */
+  const matchLimit = Math.floor(10000 / (matches.value.length ?? 10));
+
+  const paragraphs = matches.value.map(
+    ({ paragraph, matches }, paragraphIndex) => {
+      /** hard limit matches to avoid rendering slowness or crashes */
+      matches = matches.slice(0, matchLimit);
+      /** sort so array order doesn't matter for equality */
+      /** put slices that start later first, for benefit of hover */
+      matches = orderBy(matches, "start", "desc");
+
       /** convert matches into sequentially-renderable highlighted dom elements */
-      range(0, paragraph.length)
-        /** for each character in paragraph */
-        .map((char) => ({
-          char,
-          matches:
-            /** sort so array order doesn't matter for equality */
-            orderBy(
+      return (
+        range(0, paragraph.length)
+          /** for each character in paragraph */
+          .map((char) => ({
+            char,
+            matches:
               /** get match highlights that include this char */
               matches.filter(({ start, end }) => inRange(char, start, end)),
-              /**
-               * put slices that start later first, for benefit of hover and
-               * tooltip
-               */
-              "start",
-              "desc",
-            ),
-        }))
-        .filter(
-          /** remove char entries that are same as previous */
-          ({ matches }, index, array) =>
-            !isEqual(matches, array[index - 1]?.matches),
-        )
-        .map(({ char, matches }, index, array) => {
-          /** original slice of paragraph to render */
-          const original = paragraph.slice(
-            char,
-            array[index + 1]?.char ?? paragraph.length,
-          );
+          }))
+          .filter(
+            /** remove char entries that are same as previous */
+            ({ matches }, index, array) =>
+              !isEqual(matches, array[index - 1]?.matches),
+          )
+          .map(({ char, matches }, index, array) => {
+            const start = char;
+            const end = array[index + 1]?.char ?? paragraph.length;
 
-          /** get unique id for slice */
-          const id = getId({ char, matches });
+            /** get unique id for highlight */
+            const id = [comp, paragraphIndex, start, end].join("-");
 
-          /** list of highlights associated with slice */
-          const highlights = Object.values(groupBy(matches, "text")).map(
-            (fullMatches) => {
-              /** these fields should be same for all matches, so just take first */
-              const { text, start, end } = fullMatches[0]!;
+            /** original slice of paragraph to render */
+            const original = paragraph.slice(start, end);
 
-              /** sort stronger matches first */
-              fullMatches = orderBy(fullMatches, "score", "desc");
+            /** list of highlights associated with slice */
+            const highlights = Object.values(groupBy(matches, "text")).map(
+              (fullMatches) => {
+                /**
+                 * these fields should be same for all matches, so just take
+                 * first
+                 */
+                const { text, start, end } = fullMatches[0]!;
 
-              /**
-               * only keep fields that we need, and that are different for every
-               * match
-               */
-              const matches = map(fullMatches, ({ search, score }) => ({
-                search,
-                score,
-              }));
+                /**
+                 * only keep fields that we need, and that are different for
+                 * every match
+                 */
+                const matches = map(fullMatches, ({ search, score }) => ({
+                  search,
+                  score,
+                }))
+                  /** hard limit matches to avoid cluttering tooltip */
+                  .slice(0, 5);
 
-              const highlight = { text, matches };
+                const highlight = { text, matches };
 
-              /** get unique id for highlight */
-              const id = getId({ paragraphIndex, start, end, highlight });
+                /** get unique id for highlight */
+                const id = [comp, paragraphIndex, start, end].join("-");
 
-              return { id, ...highlight };
-            },
-          );
+                return { id, ...highlight };
+              },
+            );
 
-          /** extract out highlight ids for convenience */
-          const highlightIds = map(highlights, "id");
+            /** extract out highlight ids for convenience */
+            const highlightIds = map(highlights, "id");
 
-          /** "strength", used for coloring. start empty, calc after. */
-          const strength = 0;
+            /** "strength", used for coloring. start empty, calc after. */
+            const strength = 0;
 
-          return { id, original, highlights, highlightIds, strength };
-        }),
+            return { id, original, highlights, highlightIds, strength };
+          })
+      );
+    },
   );
 
   /** determine max # of highlights that will ever overlap each other */
@@ -329,24 +417,26 @@ const withSlices = computed(() => {
 
 /** summary info */
 const summary = computed(() => {
-  const matches = withMatches.value.map(({ matches }) => matches).flat();
-  const total = matches.length;
+  const allMatches = matches.value.map(({ matches }) => matches).flat();
+  const total = allMatches.length;
   const counts = orderBy(
-    Object.entries(groupBy(matches, "search")).map(
+    Object.entries(groupBy(allMatches, "search")).map(
       ([search, matches]) => [search, matches.length] as const,
     ),
     "[1]",
     "desc",
-  );
+  )
+    /** hard limit counts to avoid rendering slowness */
+    .slice(0, 100);
   return { total, counts };
 });
 
-type Highlights = (typeof withSlices.value)[number][number]["highlights"];
+type Highlights = (typeof slices.value)[number][number]["highlights"];
 
 /** handle hover */
 const setHover = (highlights: Highlights) =>
-  (hover.value = highlights[0]?.id ?? 0);
-const clearHover = () => (hover.value = 0);
+  (hover.value = highlights[0]?.id ?? "");
+const clearHover = () => (hover.value = "");
 </script>
 
 <style scoped>
@@ -358,6 +448,10 @@ section {
 @media (max-width: 600px) {
   section {
     flex-direction: column;
+  }
+
+  .input {
+    position: unset !important;
   }
 
   .input > * {
@@ -469,7 +563,7 @@ section {
 }
 
 .highlight {
-  background: hsla(350, 100%, 75%, var(--strength));
+  background: hsla(340, 100%, 75%, var(--strength));
 }
 
 .highlight-hover {

@@ -1,8 +1,8 @@
-import distance from "damerau-levenshtein";
-import { map } from "lodash";
+import { map, orderBy, range } from "lodash";
+import stringComparison from "string-comparison";
 import { worker } from "workerpool";
 
-type Matches = {
+export type Matches = {
   text: string;
   search: string;
   score: number;
@@ -24,18 +24,12 @@ export const splitWords = (text: string) => matchAll("[\\p{L}\\p{N}-]+", text);
 /** map [0,∞] to [1,0] */
 const decay = (steps: number, base = 1.5) => base ** -steps;
 
-/**
- * reference:
- * https://freedium.cfd/https://marian-caikovski.medium.com/fuzzy-search-for-keywords-in-free-text-f732ecdc9519
- * https://github.com/marianc000/HighlightingFuzzySearchResults
- */
-
 /** compare free text against list of search phrases */
 export const getMatches = (
   text: string,
   searches: string[],
-  wordWindow = 1,
-  threshold = 1,
+  window = 1,
+  exact = true,
 ) => {
   /** normalize strings for comparison */
   text = text.toLowerCase();
@@ -46,18 +40,21 @@ export const getMatches = (
   /** collect match results */
   let matches: Matches = [];
 
-  /** split paragraph into separate words */
+  /** split text into separate words */
   const words = splitWords(text);
+
+  /** various window sizes */
+  const windows = range(1, window);
 
   /** for each word */
   for (let startWord = 0; startWord < words.length; startWord++) {
     /** for each window size */
-    for (let windowSize = 1; windowSize <= wordWindow; windowSize++) {
+    for (const window of windows) {
       /** if window extends beyond words, ignore */
-      if (startWord + windowSize > words.length) continue;
+      if (startWord + window > words.length) continue;
 
       /** get sliding window of words */
-      const windowWords = words.slice(startWord, startWord + windowSize);
+      const windowWords = words.slice(startWord, startWord + window);
       /** get window text */
       const text = map(windowWords, "text").join(" ");
       /** get range */
@@ -66,33 +63,22 @@ export const getMatches = (
 
       /** for each search term */
       for (const search of searches) {
-        if (threshold >= 1) {
+        if (exact) {
           if (text === search) {
-            matches.push({
-              text,
-              search,
-              score: 1,
-              start,
-              end,
-            });
+            matches.push({ text, search, score: 1, start, end });
           }
         } else {
           /** calculate distance between strings */
-          let steps = distance(text, search).steps;
+          const steps = stringComparison.levenshtein.distance(text, search);
           /** calculate score */
           const score = decay(steps);
-          if (score >= threshold)
-            matches.push({
-              text,
-              search,
-              score,
-              start,
-              end,
-            });
+          matches.push({ text, search, score, start, end });
         }
       }
     }
   }
+  /** hard limit matches to avoid crashing web worker */
+  matches = orderBy(matches, "score", "desc").slice(0, 1000);
 
   return matches;
 };

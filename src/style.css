@@ -1,6 +1,6 @@
 :root {
-  --theme: hsl(350, 50%, 50%);
-  --gray: hsl(350, 5%, 50%);
+  --theme: hsl(340, 50%, 50%);
+  --gray: hsl(340, 5%, 50%);
 
   --rounded: 3px;
   --shadow: 0 0 2px #00000040, 1px 2px 5px #00000020;
@@ -55,6 +55,7 @@ h2 {
 p {
   width: 100%;
   margin: 0;
+  overflow-wrap: anywhere;
 }
 
 strong {
@@ -86,6 +87,10 @@ label {
   min-width: 100%;
   padding: 10px 0;
   gap: 10px;
+}
+
+label > input {
+  flex-grow: 1;
 }
 
 input {
