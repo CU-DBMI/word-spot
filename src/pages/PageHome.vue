@@ -120,16 +120,7 @@
 
 <script setup lang="ts">
 import { computed, ref, shallowRef, useTemplateRef, watch } from "vue";
-import {
-  groupBy,
-  inRange,
-  isEqual,
-  map,
-  max,
-  orderBy,
-  range,
-  sumBy,
-} from "lodash";
+import { groupBy, inRange, isEqual, map, max, orderBy, range } from "lodash";
 import { useDebounce, useLocalStorage } from "@vueuse/core";
 import exampleSearch from "@/assets/example-search.txt?raw";
 import exampleText from "@/assets/example-text.txt?raw";
@@ -139,7 +130,7 @@ import AppUpload from "@/components/AppUpload.vue";
 import { useScrollable } from "@/util/composables";
 import { getPool } from "@/util/pool";
 import { splitWords } from "@/util/search";
-import type { Matches } from "@/util/search";
+import type { Match } from "@/util/search";
 import * as SearchAPI from "@/util/search";
 import SearchWorker from "@/util/search?worker&url";
 
@@ -193,14 +184,12 @@ const wordWindow = computed(
 /** whether to use exact search */
 const exact = computed(() => debouncedExactness.value >= 1);
 
-type WithMatches = { paragraph: string; matches: Matches }[];
-
-/** paragraphs with exact search matches */
-const exactMatches = shallowRef<WithMatches>([]);
-/** paragraphs with fuzzy search matches */
-const fuzzyMatches = shallowRef<WithMatches>([]);
+/** exact search matches, per paragraph */
+const exactMatches = shallowRef<Match[][]>([]);
+/** fuzzy search matches, per paragraph */
+const fuzzyMatches = shallowRef<Match[][]>([]);
 /** matches, depending on threshold */
-const matches = shallowRef<WithMatches>([]);
+const matches = shallowRef<Match[][]>([]);
 
 watch(
   /** when inputs change */
@@ -220,6 +209,7 @@ const { run, cleanup } = getPool<typeof SearchAPI>(SearchWorker);
 watch(
   [paragraphs, searches, wordWindow, exact, exactMatches, fuzzyMatches],
   async () => {
+    /** cancel any in-progress work */
     await cleanup();
 
     /** if matches already exist, don't recalculate */
@@ -244,7 +234,7 @@ watch(
           );
           /** update progress */
           progress.value = done++ / paragraphs.value.length;
-          return { paragraph, matches };
+          return matches;
         }),
       ).catch(console.warn)) ?? [];
 
@@ -266,26 +256,45 @@ watch(
       /** which matches to use */
       (debouncedExactness.value < 1 ? fuzzyMatches.value : exactMatches.value)
         /** remove matches below threshold */
-        .map(({ paragraph, matches }) => ({
-          paragraph,
-          matches: matches.filter(
-            (match) => match.score >= debouncedExactness.value,
-          ),
-        }));
+        .map((matches) =>
+          matches.filter((match) => match.score >= debouncedExactness.value),
+        );
   },
   { immediate: true },
 );
 
-/** paragraphs with highlighted slices */
-const slices = computed(() => {
-  /** unique id for this computation */
-  const comp = Math.random();
+type Highlight = {
+  id: string;
+  text: string;
+  matches: {
+    search: string;
+    score: number;
+  }[];
+};
 
-  /** match limit per paragraph */
-  const matchLimit = Math.floor(10000 / (matches.value.length ?? 10));
+type Slice = {
+  id: string;
+  original: string;
+  highlights: Highlight[];
+  highlightIds: string[];
+  strength: number;
+};
 
-  const paragraphs = matches.value.map(
-    ({ paragraph, matches }, paragraphIndex) => {
+/** highlighted slices, per paragraph */
+const slices = shallowRef<Slice[][]>([]);
+
+watch(
+  [matches],
+  () => {
+    /** unique id for this computation */
+    const comp = Math.random();
+
+    /** match limit per paragraph */
+    const matchLimit = Math.floor(10000 / (matches.value.length ?? 10));
+
+    const newSlices = matches.value.map((matches, paragraphIndex) => {
+      /** associated input paragraph */
+      const paragraph = paragraphs.value[paragraphIndex]!;
       /** hard limit matches to avoid rendering slowness or crashes */
       matches = matches.slice(0, matchLimit);
       /** sort so array order doesn't matter for equality */
@@ -311,7 +320,7 @@ const slices = computed(() => {
             const start = char;
             const end = array[index + 1]?.char ?? paragraph.length;
 
-            /** get unique id for highlight */
+            /** get unique id for slice */
             const id = [comp, paragraphIndex, start, end].join("-");
 
             /** original slice of paragraph to render */
@@ -349,36 +358,22 @@ const slices = computed(() => {
             /** extract out highlight ids for convenience */
             const highlightIds = map(highlights, "id");
 
-            /** "strength", used for coloring. start empty, calc after. */
-            const strength = 0;
+            /** "strength", used for coloring */
+            const strength = max(map(matches, "score")) ?? 0;
 
             return { id, original, highlights, highlightIds, strength };
           })
       );
-    },
-  );
+    });
 
-  /** determine max # of highlights that will ever overlap each other */
-  const maxOverlapping =
-    max(map(paragraphs.flat(), (paragraph) => paragraph.highlights.length)) ??
-    1;
-
-  /** calculate slice strengths */
-  for (const paragraph of paragraphs)
-    for (const slice of paragraph)
-      slice.strength = sumBy(slice.highlights, (highlight) => {
-        /** use strongest (first) search match score */
-        const strength = highlight.matches[0]?.score ?? 0;
-        /** ensure sum of highlight strengths on a slice never exceeds 1 */
-        return strength / maxOverlapping;
-      });
-
-  return paragraphs;
-});
+    slices.value = newSlices;
+  },
+  { immediate: true },
+);
 
 /** summary info */
 const summary = computed(() => {
-  const allMatches = matches.value.map(({ matches }) => matches).flat();
+  const allMatches = matches.value.flat();
   const total = allMatches.length;
   const counts = orderBy(
     Object.entries(groupBy(allMatches, "search")).map(
@@ -392,10 +387,8 @@ const summary = computed(() => {
   return { total, counts };
 });
 
-type Highlights = (typeof slices.value)[number][number]["highlights"];
-
 /** handle hover */
-const setHover = (highlights: Highlights) =>
+const setHover = (highlights: Highlight[]) =>
   (hover.value = highlights[0]?.id ?? "");
 const clearHover = () => (hover.value = "");
 </script>

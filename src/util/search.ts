@@ -2,13 +2,13 @@ import { map, orderBy, range } from "lodash";
 import stringComparison from "string-comparison";
 import { worker } from "workerpool";
 
-export type Matches = {
+export type Match = {
   text: string;
   search: string;
   score: number;
   start: number;
   end: number;
-}[];
+};
 
 /** get all matches of regex, with indices */
 export const matchAll = (regex: string, text: string) =>
@@ -38,7 +38,7 @@ export const getMatches = (
   );
 
   /** collect match results */
-  let matches: Matches = [];
+  let matches: Match[] = [];
 
   /** split text into separate words */
   const words = splitWords(text);
