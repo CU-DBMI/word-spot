@@ -218,7 +218,7 @@ watch(
     if (!exact.value && fuzzyMatches.value.length) return;
 
     /** progress */
-    progress.value = 0;
+    progress.value = 0.000001;
     let done = 0;
 
     const matches =
@@ -234,7 +234,7 @@ watch(
             exact.value,
           );
           /** update progress */
-          progress.value = done++ / paragraphs.value.length;
+          progress.value = ++done / paragraphs.value.length;
           return matches;
         }),
       ).catch(console.warn)) ?? [];
