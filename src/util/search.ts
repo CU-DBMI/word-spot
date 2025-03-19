@@ -64,9 +64,8 @@ export const getMatches = (
       /** for each search term */
       for (const search of searches) {
         if (exact) {
-          if (text === search) {
+          if (text === search)
             matches.push({ text, search, score: 1, start, end });
-          }
         } else {
           /** calculate distance between strings */
           const steps = stringComparison.levenshtein.distance(text, search);
@@ -84,5 +83,3 @@ export const getMatches = (
 };
 
 worker({ getMatches });
-
-export type GetMatches = typeof getMatches;
