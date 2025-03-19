@@ -44,17 +44,17 @@ export const getMatches = (
   const words = splitWords(text);
 
   /** various window sizes */
-  const windows = range(1, window);
+  const windows = range(1, window + 1);
 
   /** for each word */
-  for (let startWord = 0; startWord < words.length; startWord++) {
+  for (let wordIndex = 0; wordIndex < words.length; wordIndex++) {
     /** for each window size */
     for (const window of windows) {
       /** if window extends beyond words, ignore */
-      if (startWord + window > words.length) continue;
+      if (wordIndex + window > words.length) continue;
 
       /** get sliding window of words */
-      const windowWords = words.slice(startWord, startWord + window);
+      const windowWords = words.slice(wordIndex, wordIndex + window);
       /** get window text */
       const text = map(windowWords, "text").join(" ");
       /** get range */

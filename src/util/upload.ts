@@ -13,11 +13,10 @@ export const parseWordDoc = async (buffer: ArrayBuffer) =>
 /** parse uploaded file as PDF */
 export const parsePdf = async (buffer: ArrayBuffer) => {
   const pdf = await pdfjs.getDocument(buffer).promise;
-  const pages = pdf.numPages;
   let text = "";
-  for (let index = 1; index <= pages; index++)
+  for (let pageIndex = 1; pageIndex <= pdf.numPages; pageIndex++)
     text +=
-      (await (await pdf.getPage(index)).getTextContent()).items
+      (await (await pdf.getPage(pageIndex)).getTextContent()).items
         .map((item) => ("str" in item ? item.str : ""))
         .join(" ") + "\n";
   return text;

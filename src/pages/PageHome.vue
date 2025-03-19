@@ -120,7 +120,7 @@
 
 <script setup lang="ts">
 import { computed, ref, shallowRef, useTemplateRef, watch } from "vue";
-import { groupBy, inRange, isEqual, map, max, orderBy, range } from "lodash";
+import { groupBy, map, max, orderBy, uniq } from "lodash";
 import { useDebounce, useLocalStorage } from "@vueuse/core";
 import exampleSearch from "@/assets/example-search.txt?raw";
 import exampleText from "@/assets/example-text.txt?raw";
@@ -128,6 +128,7 @@ import AppButton from "@/components/AppButton.vue";
 import AppTextbox from "@/components/AppTextbox.vue";
 import AppUpload from "@/components/AppUpload.vue";
 import { useScrollable } from "@/util/composables";
+import { pairs } from "@/util/misc";
 import { getPool } from "@/util/pool";
 import { splitWords } from "@/util/search";
 import type { Match } from "@/util/search";
@@ -284,87 +285,96 @@ type Slice = {
 const slices = shallowRef<Slice[][]>([]);
 
 watch(
-  [matches],
+  [paragraphs, matches],
   () => {
-    /** unique id for this computation */
-    const comp = Math.random();
+    /** unique id for this watch run */
+    const run = Math.random();
 
     /** match limit per paragraph */
     const matchLimit = Math.floor(10000 / (matches.value.length ?? 10));
 
-    const newSlices = matches.value.map((matches, paragraphIndex) => {
-      /** associated input paragraph */
+    /** convert matches into sequentially-renderable highlighted dom elements */
+    const newSlices: Slice[][] = [];
+
+    /** for each paragraph */
+    for (
+      let paragraphIndex = 0;
+      paragraphIndex < matches.value.length;
+      paragraphIndex++
+    ) {
+      const newSlice: Slice[] = [];
+
+      /** input paragraph */
       const paragraph = paragraphs.value[paragraphIndex]!;
+
+      /** matches for this paragraph */
+      let paragraphMatches = matches.value[paragraphIndex]!;
+
       /** hard limit matches to avoid rendering slowness or crashes */
-      matches = matches.slice(0, matchLimit);
-      /** sort so array order doesn't matter for equality */
+      paragraphMatches = paragraphMatches.slice(0, matchLimit);
+
       /** put slices that start later first, for benefit of hover */
-      matches = orderBy(matches, "start", "desc");
+      paragraphMatches = orderBy(paragraphMatches, "start", "desc");
 
-      /** convert matches into sequentially-renderable highlighted dom elements */
-      return (
-        range(0, paragraph.length)
-          /** for each character in paragraph */
-          .map((char) => ({
-            char,
-            matches:
-              /** get match highlights that include this char */
-              matches.filter(({ start, end }) => inRange(char, start, end)),
-          }))
-          .filter(
-            /** remove char entries that are same as previous */
-            ({ matches }, index, array) =>
-              !isEqual(matches, array[index - 1]?.matches),
-          )
-          .map(({ char, matches }, index, array) => {
-            const start = char;
-            const end = array[index + 1]?.char ?? paragraph.length;
-
-            /** get unique id for slice */
-            const id = [comp, paragraphIndex, start, end].join("-");
-
-            /** original slice of paragraph to render */
-            const original = paragraph.slice(start, end);
-
-            /** list of highlights associated with slice */
-            const highlights = Object.values(groupBy(matches, "text")).map(
-              (fullMatches) => {
-                /**
-                 * these fields should be same for all matches, so just take
-                 * first
-                 */
-                const { text, start, end } = fullMatches[0]!;
-
-                /**
-                 * only keep fields that we need, and that are different for
-                 * every match
-                 */
-                const matches = map(fullMatches, ({ search, score }) => ({
-                  search,
-                  score,
-                }))
-                  /** hard limit matches to avoid cluttering tooltip */
-                  .slice(0, 5);
-
-                const highlight = { text, matches };
-
-                /** get unique id for highlight */
-                const id = [comp, paragraphIndex, start, end].join("-");
-
-                return { id, ...highlight };
-              },
-            );
-
-            /** extract out highlight ids for convenience */
-            const highlightIds = map(highlights, "id");
-
-            /** "strength", used for coloring */
-            const strength = max(map(matches, "score")) ?? 0;
-
-            return { id, original, highlights, highlightIds, strength };
-          })
+      /** get in-order list of start/end indices, defining slice boundaries */
+      const indices = orderBy(
+        uniq([
+          0,
+          ...paragraphMatches.flatMap((match) => [match.start, match.end]),
+          paragraph.length,
+        ]),
       );
-    });
+
+      /** for each slice */
+      for (const [start, end] of pairs(indices)) {
+        /** get all matches within slice range */
+        const sliceMatches = paragraphMatches.filter(
+          (match) => !(match.end <= start || match.start >= end),
+        );
+
+        /** get unique id for slice */
+        const id = [run, paragraphIndex, start, end].join("-");
+
+        /** original slice of paragraph to render */
+        const original = paragraph.slice(start, end);
+
+        /** list of highlights associated with slice */
+        const highlights = Object.values(groupBy(sliceMatches, "text")).map(
+          (fullMatches) => {
+            /** these fields should be same for all matches, so just take first */
+            const { text, start, end } = fullMatches[0]!;
+
+            /**
+             * only keep fields that we need, and that are different for every
+             * match
+             */
+            const matches = map(fullMatches, ({ search, score }) => ({
+              search,
+              score,
+            }))
+              /** hard limit matches to avoid cluttering tooltip */
+              .slice(0, 5);
+
+            const highlight = { text, matches };
+
+            /** get unique id for highlight */
+            const id = [run, paragraphIndex, start, end].join("-");
+
+            return { id, ...highlight };
+          },
+        );
+
+        /** extract out highlight ids for convenience */
+        const highlightIds = map(highlights, "id");
+
+        /** "strength", used for coloring */
+        const strength = max(map(sliceMatches, "score")) ?? 0;
+
+        newSlice.push({ id, original, highlights, highlightIds, strength });
+      }
+
+      newSlices.push(newSlice);
+    }
 
     slices.value = newSlices;
   },
