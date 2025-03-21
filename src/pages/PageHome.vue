@@ -265,18 +265,18 @@ watch(
 
 /** update matches */
 watch(
-  [withExactMatches, withFuzzyMatches, debouncedExactness],
+  [withExactMatches, withFuzzyMatches, exact, debouncedExactness],
   () => {
     withMatches.value =
       /** which matches to use */
-      debouncedExactness.value < 1
-        ? withFuzzyMatches.value
-        : withExactMatches.value;
-
-    /** remove matches below threshold */
-    for (const paragraph of withMatches.value)
-      paragraph.matches = paragraph.matches.filter(
-        (match) => match.score >= debouncedExactness.value,
+      (exact.value ? withExactMatches.value : withFuzzyMatches.value).map(
+        ({ paragraph, matches }) => ({
+          paragraph,
+          /** remove matches below threshold */
+          matches: matches.filter(
+            (match) => match.score >= debouncedExactness.value,
+          ),
+        }),
       );
   },
   { immediate: true },
