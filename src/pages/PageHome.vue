@@ -68,9 +68,19 @@
         </template>
       </div>
 
-      <p v-if="!text.length" class="placeholder">Enter some text</p>
-      <p v-if="!search.length" class="placeholder">Enter a search</p>
-      <p v-if="!summary.total && !progress" class="placeholder">No matches</p>
+      <p v-if="!debouncedText.length" class="placeholder">Enter some text</p>
+      <p v-if="!debouncedSearch.length" class="placeholder">Enter a search</p>
+      <p
+        v-if="
+          debouncedText.length &&
+          debouncedSearch.length &&
+          !summary.total &&
+          !progress
+        "
+        class="placeholder"
+      >
+        No matches
+      </p>
       <p v-if="progress" class="placeholder">
         Checking {{ (100 * progress).toFixed() }}%
       </p>
@@ -110,7 +120,7 @@
         </p>
       </template>
 
-      <p v-if="!text.length" class="placeholder">Enter some text</p>
+      <p v-if="!debouncedText.length" class="placeholder">Enter some text</p>
       <p v-if="progress" class="placeholder">
         Checking {{ (100 * progress).toFixed() }}%
       </p>
