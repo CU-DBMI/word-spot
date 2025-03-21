@@ -210,6 +210,7 @@ watch(
   /** when inputs change */
   [paragraphs, searches, wordWindow],
   () => {
+    console.debug("reset matches");
     /** reset matches */
     withExactMatches.value = [];
     withFuzzyMatches.value = [];
@@ -224,6 +225,7 @@ const { run, cleanup } = getPool<typeof SearchAPI>(SearchWorker);
 watch(
   [paragraphs, searches, wordWindow, exact],
   async () => {
+    console.debug("update matches");
     /** cancel any in-progress work */
     await cleanup();
 
@@ -263,10 +265,11 @@ watch(
   { immediate: true },
 );
 
-/** update matches */
+/** choose matches */
 watch(
   [withExactMatches, withFuzzyMatches, exact, debouncedExactness],
   () => {
+    console.debug("choose matches");
     withMatches.value =
       /** which matches to use */
       (exact.value ? withExactMatches.value : withFuzzyMatches.value).map(
@@ -305,6 +308,8 @@ const withSlices = shallowRef<Slice[][]>([]);
 watch(
   [withMatches],
   () => {
+    console.debug("make slices");
+
     /** unique id for this watch run */
     const run = Math.random();
 
@@ -395,6 +400,7 @@ watch(
 
 /** summary info */
 const summary = computed(() => {
+  console.debug("get summary");
   const allMatches = map(withMatches.value, "matches").flat();
   const total = allMatches.length;
   let counts = Object.entries(groupBy(allMatches, "search")).map(

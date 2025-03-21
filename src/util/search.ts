@@ -1,4 +1,4 @@
-import { map, orderBy, range } from "lodash";
+import { map, range } from "lodash";
 import stringComparison from "string-comparison";
 import { worker } from "workerpool";
 
@@ -76,8 +76,11 @@ export const getMatches = (
       }
     }
   }
+
+  /** put highest matches first (orderBy not memory-efficient-enough here) */
+  matches.sort((a, b) => b.score - a.score);
   /** hard limit matches to avoid crashing web worker */
-  matches = orderBy(matches, "score", "desc").slice(0, 1000);
+  matches = matches.slice(0, 1000);
 
   return matches;
 };
