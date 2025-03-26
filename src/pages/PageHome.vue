@@ -11,7 +11,9 @@
       />
 
       <div class="controls">
-        <AppButton @click="text = exampleText">Example</AppButton>
+        <AppButton v-if="exampleText.trim()" @click="text = exampleText">
+          Example
+        </AppButton>
         <AppUpload
           :drop-zone="textElement?.element"
           :accept="uploadMimeTypes"
@@ -31,7 +33,9 @@
       />
 
       <div class="controls">
-        <AppButton @click="search = exampleSearch">Example</AppButton>
+        <AppButton v-if="exampleSearch.trim()" @click="search = exampleSearch">
+          Example
+        </AppButton>
         <AppUpload
           :drop-zone="searchElement?.element"
           :accept="uploadMimeTypes"
@@ -166,6 +170,7 @@ const summaryElement = useTemplateRef("summaryElement");
 /** scroll indicators */
 useScrollable(summaryElement);
 
+/** debug */
 // window.localStorage.clear();
 
 /** state */

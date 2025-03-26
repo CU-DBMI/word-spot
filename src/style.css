@@ -1,6 +1,8 @@
 :root {
   --theme: hsl(340, 50%, 50%);
+  --light-gray: hsl(340, 5%, 80%);
   --gray: hsl(340, 5%, 50%);
+  --dark-gray: hsl(340, 5%, 30%);
 
   --rounded: 3px;
   --shadow: 0 0 2px #00000040, 1px 2px 5px #00000020;
@@ -11,7 +13,7 @@
 }
 
 html {
-  line-height: 1.5;
+  line-height: 1.75;
   font-family: "Inter", sans-serif;
 }
 
@@ -96,6 +98,10 @@ label > input {
 input {
   min-width: 0;
   accent-color: var(--theme);
+  font: inherit;
+}
+
+input[type="range"] {
   cursor: pointer;
 }
 

@@ -1,10 +1,16 @@
 <template>
   <div>
     <textarea
+      v-bind="$attrs"
       ref="element"
       :value="modelValue"
-      @input="(event) => emit('update:modelValue', (event.target as HTMLTextAreaElement)?.value || '')"
-      :placeholder="placeholder"
+      @input="
+        (event) =>
+          emit(
+            'update:modelValue',
+            (event.target as HTMLTextAreaElement)?.value || '',
+          )
+      "
     />
     <button aria-label="Clear" @click="emit('update:modelValue', '')">×</button>
   </div>
@@ -15,7 +21,6 @@ import { useTemplateRef } from "vue";
 
 type Props = {
   modelValue?: string;
-  placeholder?: string;
 };
 
 defineProps<Props>();
@@ -38,9 +43,9 @@ div {
   width: 100%;
   min-width: 200px;
   min-height: 3lh;
+  overflow: hidden;
   border-radius: var(--rounded);
   box-shadow: var(--shadow);
-  overflow: hidden;
   resize: both;
 }
 
