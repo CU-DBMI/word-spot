@@ -27,42 +27,35 @@ const decay = (steps: number, base = 1.5) => base ** -steps;
 /** compare free text against list of search phrases */
 export const getMatches = (
   text: string,
-  searches: string[],
-  window = 1,
+  searches: (readonly [string, number])[],
   exact = true,
 ) => {
-  /** normalize strings for comparison */
-  text = text.toLowerCase();
-  searches = searches.map((search) =>
-    search.toLowerCase().replaceAll(/\s+/g, " "),
-  );
-
   /** collect match results */
   let matches: Match[] = [];
 
   /** split text into separate words */
   const words = splitWords(text);
 
-  /** various window sizes */
-  const windows = range(1, window + 1);
-
   /** for each word */
   for (let wordIndex = 0; wordIndex < words.length; wordIndex++) {
-    /** for each window size */
-    for (const window of windows) {
-      /** if window extends beyond words, ignore */
-      if (wordIndex + window > words.length) continue;
+    /** for each search term */
+    for (const [search, window] of searches) {
+      /** window sizes to check */
+      const windows = range(1, window + 1);
 
-      /** get sliding window of words */
-      const windowWords = words.slice(wordIndex, wordIndex + window);
-      /** get window text */
-      const text = map(windowWords, "text").join(" ");
-      /** get range */
-      const start = windowWords.at(0)?.start ?? 0;
-      const end = windowWords.at(-1)?.end ?? 0;
+      /** for each window size */
+      for (const window of windows) {
+        /** if window extends beyond end, ignore */
+        if (wordIndex + window > words.length) continue;
 
-      /** for each search term */
-      for (const search of searches) {
+        /** get sliding window of words */
+        const windowWords = words.slice(wordIndex, wordIndex + window);
+        /** get window text */
+        const text = map(windowWords, "text").join(" ");
+        /** get range */
+        const start = windowWords.at(0)?.start ?? 0;
+        const end = windowWords.at(-1)?.end ?? 0;
+
         if (exact) {
           if (text === search)
             matches.push({ text, search, score: 1, start, end });

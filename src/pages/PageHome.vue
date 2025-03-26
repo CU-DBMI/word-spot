@@ -66,7 +66,10 @@
           {{ summary.total.toLocaleString() }}
         </span>
 
-        <template v-for="([search, matches], key) in summary.counts" :key="key">
+        <template
+          v-for="([search, matches], countIndex) in summary.counts"
+          :key="countIndex"
+        >
           <span>{{ search }}</span>
           <span>{{ matches.toLocaleString() }}</span>
         </template>
@@ -92,35 +95,27 @@
       <h2>Results</h2>
 
       <template v-if="withSlices.length">
-        <p v-for="(paragraph, key) in withSlices" :key="key">
-          <AppTooltip
+        <p
+          v-for="(paragraph, paragraphIndex) in withSlices"
+          :key="paragraphIndex"
+        >
+          <span
             v-for="slice in paragraph"
             :key="slice.id"
+            tabindex="0"
             :class="[
               slice.strength && 'highlight',
-              slice.highlightIds.includes(hover) && 'highlight-hover',
+              slice.highlightIds.includes(selectedHighlight?.id ?? '') &&
+                'highlight-hover',
             ]"
             :style="{ '--strength': slice.strength }"
-            @mouseenter="setHover(slice.highlights)"
-            @mouseleave="clearHover"
+            @mouseenter="(event) => select(slice, event)"
+            @mouseleave="deselect"
+            @focus="(event) => select(slice, event)"
+            @blur="deselect"
           >
-            <template #default>{{ slice.original }}</template>
-            <template v-if="slice.highlights[0]" #content>
-              <div class="tooltip">
-                <div>"{{ slice.highlights[0].text }}" matches...</div>
-                <div class="tooltip-indent">
-                  <div
-                    v-for="(match, key) in slice.highlights[0].matches"
-                    :key="key"
-                  >
-                    • "{{ match.search }}" ({{
-                      (100 * match.score).toFixed(0)
-                    }}%)
-                  </div>
-                </div>
-              </div>
-            </template>
-          </AppTooltip>
+            {{ slice.original }}
+          </span>
         </p>
       </template>
 
@@ -130,11 +125,31 @@
       </p>
     </div>
   </section>
+  <Teleport v-if="selectedHighlight" to="body">
+    <div ref="tooltipElement" style="display: none; position: absolute">
+      <div>"{{ selectedHighlight.text }}" matches...</div>
+      <div class="indent">
+        <div v-for="(match, key) in selectedHighlight.matches" :key="key">
+          • "{{ match.search }}" ({{ (100 * match.score).toFixed(0) }}%)
+        </div>
+      </div>
+    </div>
+  </Teleport>
 </template>
 
 <script setup lang="ts">
-import { computed, ref, shallowRef, useTemplateRef, watch } from "vue";
+import {
+  computed,
+  nextTick,
+  ref,
+  shallowRef,
+  Teleport,
+  useTemplateRef,
+  watch,
+} from "vue";
+import { tippy } from "vue-tippy";
 import { groupBy, map, max, orderBy, pick, uniq } from "lodash";
+import type { Instance } from "tippy.js";
 import { useDebounce, useLocalStorage } from "@vueuse/core";
 import exampleSearch from "@/assets/example-search.txt?raw";
 import exampleText from "@/assets/example-text.txt?raw";
@@ -166,6 +181,7 @@ const uploadTooltip =
 const textElement = useTemplateRef("textElement");
 const searchElement = useTemplateRef("searchElement");
 const summaryElement = useTemplateRef("summaryElement");
+const tooltipElement = useTemplateRef("tooltipElement");
 
 /** scroll indicators */
 useScrollable(summaryElement);
@@ -177,12 +193,13 @@ useScrollable(summaryElement);
 const text = useLocalStorage("text", "");
 const search = useLocalStorage("search", "");
 const exactness = ref(1);
-const hover = ref("");
+const selectedHighlight = ref<Highlight>();
+const selectedTooltip = ref<Instance>();
 const progress = ref(0);
 
 /** debounced state */
-const debouncedText = useDebounce(text, 1000);
-const debouncedSearch = useDebounce(search, 1000);
+const debouncedText = useDebounce(text, 500);
+const debouncedSearch = useDebounce(search, 500);
 const debouncedExactness = useDebounce(exactness, 500);
 
 /** split text by paragraph */
@@ -192,11 +209,6 @@ const paragraphs = computed(() =>
 /** split search by separators */
 const searches = computed(() =>
   debouncedSearch.value.split(/[\n,]+/).filter((entry) => entry.trim()),
-);
-
-/** get max word window forsearch */
-const wordWindow = computed(
-  () => max(searches.value.map((search) => splitWords(search).length)) || 1,
 );
 
 /** whether to use exact search */
@@ -213,7 +225,7 @@ const withMatches = shallowRef<WithMatches>([]);
 
 watch(
   /** when inputs change */
-  [paragraphs, searches, wordWindow],
+  [paragraphs, searches],
   () => {
     console.debug("reset matches");
     /** reset matches */
@@ -228,7 +240,7 @@ const { run, cleanup } = getPool<typeof SearchAPI>(SearchWorker);
 
 /** update matches */
 watch(
-  [paragraphs, searches, wordWindow, exact],
+  [paragraphs, searches, exact],
   async () => {
     console.debug("update matches");
     /** cancel any in-progress work */
@@ -242,6 +254,11 @@ watch(
     progress.value = 0.000001;
     let done = 0;
 
+    /** pre-compute search windows */
+    const _searches = searches.value.map(
+      (search) => [search.toLowerCase(), splitWords(search).length] as const,
+    );
+
     const withMatches =
       (await Promise.all(
         /** for each paragraph */
@@ -249,9 +266,8 @@ watch(
           /** get search results */
           const matches = await run(
             "getMatches",
-            paragraph,
-            searches.value,
-            wordWindow.value,
+            paragraph.toLowerCase(),
+            _searches,
             exact.value,
           );
           /** update progress */
@@ -416,10 +432,26 @@ const summary = computed(() => {
   return { total, counts };
 });
 
-/** handle hover */
-const setHover = (highlights: Highlight[]) =>
-  (hover.value = highlights[0]?.id ?? "");
-const clearHover = () => (hover.value = "");
+/** select slice highlight */
+const select = async (slice: Slice, event: Event) => {
+  /** select highlight */
+  selectedHighlight.value = slice.highlights[0];
+  /** wait for tooltip template to render */
+  await nextTick();
+  /** create tippy instance */
+  selectedTooltip.value = tippy(event.currentTarget as Element);
+  /** set content from (invisibly) rendered teleported template */
+  selectedTooltip.value.setContent(tooltipElement.value?.innerHTML ?? "");
+  /** programmatically show */
+  selectedTooltip.value.show();
+};
+
+/** deselect slice highlight */
+const deselect = () => {
+  selectedHighlight.value = undefined;
+  /** clean up tippy */
+  selectedTooltip.value?.destroy();
+};
 </script>
 
 <style scoped>
@@ -553,17 +585,13 @@ section {
   box-shadow: 0 2px 0 var(--theme);
 }
 
-.tooltip,
-.tooltip-indent {
-  display: flex;
-  flex-direction: column;
+aside {
+  position: fixed;
+  right: 0;
+  bottom: 0;
 }
 
-.tooltip {
-  gap: 5px;
-}
-
-.tooltip-indent {
+.indent {
   padding-left: 10px;
 }
 </style>
