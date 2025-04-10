@@ -18,7 +18,7 @@ import { useEventListener } from "@vueuse/core";
 import AppButton from "@/components/AppButton.vue";
 import { getPool } from "@/util/pool";
 import * as UploadAPI from "@/util/upload";
-import UploadWorker from "@/util/upload?worker&url";
+import UploadWorker from "@/util/upload?worker";
 
 type Props = {
   dropZone?: HTMLElement | null;
@@ -70,9 +70,13 @@ const onLoad = async (fileList: FileList | null) => {
 
         /** parse as appropriate format */
         if (file.name.match(/\.(doc|docx)$/))
-          text = await run("parseWordDoc", await file.arrayBuffer());
+          text = await run(async (worker) =>
+            worker.parseWordDoc(await file.arrayBuffer()),
+          );
         else if (file.name.match(/\.(pdf)$/))
-          text = await run("parsePdf", await file.arrayBuffer());
+          text = await run(async (worker) =>
+            worker.parsePdf(await file.arrayBuffer()),
+          );
         else text = await file.text();
 
         return { text, filename: file.name };

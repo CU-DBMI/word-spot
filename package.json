@@ -6,15 +6,18 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@lexical/mark": "^0.30.0",
+    "@lexical/plain-text": "^0.30.0",
     "@vueuse/core": "^13.0.0",
+    "comlink": "^4.4.2",
+    "lexical": "^0.30.0",
     "lodash": "^4.17.21",
     "mammoth": "^1.9.0",
     "pdfjs-dist": "^5.0.375",
     "string-comparison": "^1.3.0",
     "vue": "^3.5.13",
     "vue-router": "4",
-    "vue-tippy": "v6",
-    "workerpool": "^9.2.0"
+    "vue-tippy": "v6"
   },
   "devDependencies": {
     "@ianvs/prettier-plugin-sort-imports": "^4.4.1",

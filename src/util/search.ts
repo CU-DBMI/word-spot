@@ -1,6 +1,6 @@
+import { expose } from "comlink";
 import { map, range } from "lodash";
 import stringComparison from "string-comparison";
-import { worker } from "workerpool";
 
 export type Match = {
   text: string;
@@ -78,4 +78,4 @@ export const getMatches = (
   return matches;
 };
 
-worker({ getMatches });
+expose({ getMatches });

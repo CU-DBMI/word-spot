@@ -1,5 +1,5 @@
 import { createRouter, createWebHistory } from "vue-router";
-import PageHome from "./pages/PageHome.vue";
+import PageHome from "@/pages/PageHome.vue";
 
 const routes = [{ path: "/", component: PageHome }];
 

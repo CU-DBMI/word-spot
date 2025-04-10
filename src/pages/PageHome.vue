@@ -143,7 +143,6 @@ import {
   nextTick,
   ref,
   shallowRef,
-  Teleport,
   useTemplateRef,
   watch,
 } from "vue";
@@ -162,7 +161,7 @@ import { getPool } from "@/util/pool";
 import { splitWords } from "@/util/search";
 import type { Match } from "@/util/search";
 import * as SearchAPI from "@/util/search";
-import SearchWorker from "@/util/search?worker&url";
+import SearchWorker from "@/util/search?worker";
 
 /** upload settings */
 const uploadMimeTypes = [
@@ -264,17 +263,17 @@ watch(
         /** for each paragraph */
         paragraphs.value.map(async (paragraph) => {
           /** get search results */
-          const matches = await run(
-            "getMatches",
-            paragraph.toLowerCase(),
-            _searches,
-            exact.value,
+          const matches = await run((worker) =>
+            worker.getMatches(paragraph.toLowerCase(), _searches, exact.value),
           );
           /** update progress */
           progress.value = ++done / paragraphs.value.length;
           return { paragraph, matches };
         }),
       ).catch(console.warn)) ?? [];
+
+    /** cancel any in-progress work */
+    await cleanup();
 
     /** progress */
     progress.value = 0;
