@@ -1,4 +1,5 @@
-import { nextTick, onMounted, watchEffect, type useTemplateRef } from "vue";
+import type { Ref } from "vue";
+import { nextTick, onMounted, watchEffect } from "vue";
 import {
   useMutationObserver,
   useResizeObserver,
@@ -6,13 +7,14 @@ import {
 } from "@vueuse/core";
 import icon from "@/assets/angle.svg";
 
-type TemplateRef = ReturnType<typeof useTemplateRef<HTMLElement>>;
-
 /** add classes to element when scrollable for styling */
 export const useScrollable = (
-  element: TemplateRef,
-  color = "#80808040",
-  size = 20,
+  element: Ref<HTMLElement | null | undefined>,
+  backgroundColor = "#ffffff",
+  shadowColor = "#00000040",
+  arrowColor = "#000000a0",
+  shadowSize = 30,
+  arrowSize = 15,
 ) => {
   const { arrivedState } = useScroll(element);
 
@@ -25,39 +27,46 @@ export const useScrollable = (
     /** gradient layers */
     const gradients = (
       [
-        [!right, "left"],
-        [!bottom, "top"],
-        [!left, "right"],
-        [!top, "bottom"],
+        [!left, 270],
+        [!top, 180],
+        [!right, 90],
+        [!bottom, 0],
       ] as const
     ).map(([arrived, direction]) =>
       arrived
-        ? `linear-gradient(to ${direction}, ${color}, transparent ${size}px)`
+        ? `linear-gradient(${direction}deg, ${shadowColor}, transparent ${shadowSize}px)`
         : "",
     );
+
+    /** nudge arrow to center in shadow */
+    const nudge = (shadowSize - arrowSize) / 2 + "px";
 
     /** image layers */
     const images = (
       [
-        [!left, "left center", 270],
-        [!top, "center top", 0],
-        [!right, "right center", 90],
-        [!bottom, "center bottom", 180],
+        [!left, `left ${nudge} center`, 90],
+        [!top, `center top ${nudge}`, 0],
+        [!right, `right ${nudge} center`, 270],
+        [!bottom, `center bottom ${nudge}`, 180],
       ] as const
     ).map(([arrived, side, rotate]) => {
       /** get icon svg url */
       const url = icon
         /** replace strings in svg source as needed */
         .replace("ROTATE", String(rotate))
-        .replace("COLOR", window.encodeURIComponent(color));
-      return arrived ? `url("${url}") ${side} / ${size}px no-repeat` : "";
+        .replace("COLOR", window.encodeURIComponent(arrowColor));
+      return arrived ? `url("${url}") ${side} / ${arrowSize}px no-repeat` : "";
     });
 
     /** combine background layers */
-    const background = gradients.concat(images).filter(Boolean).join(", ");
+    const backgroundStyle = images
+      .concat(gradients)
+      .concat([backgroundColor])
+      .filter(Boolean)
+      .join(", ");
 
     /** set style */
-    element.value.style.setProperty("background", background);
+    element.value.style.setProperty("background", backgroundStyle);
   });
 
   /** force arrived state to update */

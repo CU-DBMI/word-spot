@@ -1,7 +1,13 @@
 <template>
-  <AppButton v-tooltip="tooltip" @click="onClick">{{
-    uploading ? "Uploading..." : "Upload"
-  }}</AppButton>
+  <button
+    v-tooltip="tooltip"
+    class="square"
+    :disabled="uploading"
+    @click="onClick"
+  >
+    <LoaderCircle v-if="uploading" class="spin" />
+    <Upload v-else />
+  </button>
   <input
     ref="input"
     type="file"
@@ -14,8 +20,8 @@
 
 <script setup lang="ts">
 import { ref, useTemplateRef, watchEffect } from "vue";
+import { LoaderCircle, Upload } from "lucide-vue-next";
 import { useEventListener } from "@vueuse/core";
-import AppButton from "@/components/AppButton.vue";
 import { getPool } from "@/util/pool";
 import * as UploadAPI from "@/util/upload";
 import UploadWorker from "@/util/upload?worker";
@@ -34,6 +40,12 @@ type Emits = {
 };
 
 const emit = defineEmits<Emits>();
+
+type Slots = {
+  default: [{ uploading: boolean }];
+};
+
+defineSlots<Slots>();
 
 /** actual file input element */
 const input = useTemplateRef("input");
@@ -132,9 +144,9 @@ useEventListener(
 
 <style>
 .dragging {
-  outline-color: var(--theme);
+  outline-color: var(--primary);
   outline-style: dashed;
-  outline-width: 2px;
-  outline-offset: 2px;
+  outline-width: 3px;
+  outline-offset: -3px;
 }
 </style>

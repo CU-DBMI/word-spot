@@ -11,6 +11,7 @@ app.use(VueTippy, {
   directive: "tooltip",
   component: "AppTooltip",
   defaultProps: {
+    appendTo: () => document.body,
     delay: [100, 0],
     duration: [300, 0],
     allowHTML: true,

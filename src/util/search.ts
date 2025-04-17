@@ -29,6 +29,7 @@ export const getMatches = (
   text: string,
   searches: (readonly [string, number])[],
   exact = true,
+  offset = 0,
 ) => {
   /** collect match results */
   let matches: Match[] = [];
@@ -73,7 +74,13 @@ export const getMatches = (
   /** put highest matches first (orderBy not memory-efficient-enough here) */
   matches.sort((a, b) => b.score - a.score);
   /** hard limit matches to avoid crashing web worker */
-  matches = matches.slice(0, 1000);
+  matches = matches.slice(0, 100);
+
+  /** add index offset */
+  matches.forEach((match) => {
+    match.start += offset;
+    match.end += offset;
+  });
 
   return matches;
 };
