@@ -107,7 +107,9 @@
                 </span>
               </template>
             </div>
-            <div v-else class="secondary" style="flex-grow: 1">Matches will appear here</div>
+            <div v-else class="secondary" style="flex-grow: 1">
+              Matches will appear here
+            </div>
           </TabPanel>
         </TabPanels>
       </TabGroup>
