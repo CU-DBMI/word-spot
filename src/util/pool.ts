@@ -6,7 +6,7 @@ import { clamp } from "lodash";
 type Worker = { new (): Endpoint };
 
 /** simple pool of web workers */
-export const getPool = <API extends Record<string, (...args: any[]) => any>>(
+export const getPool = <API extends Record<string, Listener>>(
   Worker: Worker,
   maxThreads?: number,
 ) => {
@@ -65,7 +65,8 @@ export const getPool = <API extends Record<string, (...args: any[]) => any>>(
   return { run, cleanup };
 };
 
-type Listener = (...args: any[]) => void;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type Listener = (...args: any[]) => any;
 
 /** simple single-track, one-time event bus */
 const eventBus = () => {

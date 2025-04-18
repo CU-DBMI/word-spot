@@ -23,7 +23,7 @@ import { ref, useTemplateRef, watchEffect } from "vue";
 import { LoaderCircle, Upload } from "lucide-vue-next";
 import { useEventListener } from "@vueuse/core";
 import { getPool } from "@/util/pool";
-import * as UploadAPI from "@/util/upload";
+import type * as UploadAPI from "@/util/upload";
 import UploadWorker from "@/util/upload?worker";
 
 type Props = {
@@ -146,7 +146,7 @@ useEventListener(
 .dragging {
   outline-color: var(--primary);
   outline-style: dashed;
-  outline-width: 3px;
-  outline-offset: -3px;
+  outline-width: 4px;
+  outline-offset: -4px;
 }
 </style>

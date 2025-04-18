@@ -11,8 +11,8 @@ import icon from "@/assets/angle.svg";
 export const useScrollable = (
   element: Ref<HTMLElement | null | undefined>,
   backgroundColor = "#ffffff",
-  shadowColor = "#00000040",
-  arrowColor = "#000000a0",
+  shadowColor = "#80808040",
+  arrowColor = "#808080a0",
   shadowSize = 30,
   arrowSize = 15,
 ) => {

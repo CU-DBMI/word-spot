@@ -135,7 +135,7 @@ const removeEditableListener =
   editor.registerEditableListener(updatePlaceholder);
 
 /** flag for whether model value just emitted to parent */
-let justEmitted = flag();
+const justEmitted = flag();
 
 /** when user types in textbox */
 const removeTextContentListener = editor.registerTextContentListener(
@@ -301,7 +301,7 @@ onUnmounted(() => {
 
 .editable {
   flex-grow: 1;
-  padding: 40px;
+  padding: 30px 40px;
 }
 
 .editor:has(.placeholder) .editable {
@@ -312,7 +312,7 @@ onUnmounted(() => {
 .placeholder {
   display: flex;
   flex-direction: column;
-  padding: 40px;
+  padding: 30px 40px;
   gap: 20px;
   color: var(--gray);
   pointer-events: none;
@@ -330,6 +330,6 @@ onUnmounted(() => {
 }
 
 .highlight-selected {
-  box-shadow: 0 3px 0 var(--primary);
+  box-shadow: 0 2px 0 var(--black);
 }
 </style>

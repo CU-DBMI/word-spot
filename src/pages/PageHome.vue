@@ -1,13 +1,17 @@
 <template>
   <section>
+    <!-- left panel -->
     <div class="left">
-      <div v-html="logo" class="logo" />
+      <div class="logo" v-html="logo" />
 
-      <TabGroup :selectedIndex="tab" @change="(value) => (tab = value)">
+      <!-- tabs -->
+      <TabGroup :selected-index="tab" @change="(value) => (tab = value)">
+        <!-- buttons -->
         <TabList class="tabs">
           <Tab v-slot="{ selected }" as="template">
             <button :class="!selected && 'secondary'">Search</button>
           </Tab>
+
           <Tab v-slot="{ selected }" as="template">
             <button :class="!selected && 'secondary'">
               <template v-if="progress">
@@ -35,14 +39,16 @@
             </button>
           </Tab>
         </TabList>
+
+        <!-- panels -->
         <TabPanels as="template">
+          <!-- search -->
           <TabPanel as="template">
             <div class="search">
               <textarea
                 ref="searchElement"
                 v-model="search"
-                placeholder="Phrases to check for"
-                v-tooltip="'Comma or line-separated'"
+                placeholder="Phrases to search for&#10;Line or comma separated"
               />
 
               <div class="search-controls">
@@ -75,43 +81,47 @@
             </div>
           </TabPanel>
 
+          <!-- summary -->
           <TabPanel as="template">
             <div ref="summaryElement" class="summary">
-              <span>Total Matches</span>
-              <span>
-                {{ summary.total.toLocaleString() }}
-              </span>
-
               <template
-                v-for="([search, matches], countIndex) in summary.counts"
+                v-for="(
+                  countMatches, countSearch, countIndex
+                ) in summary.counts"
                 :key="countIndex"
               >
-                <span>{{ search }}</span>
-                <span>{{ matches.toLocaleString() }}</span>
+                <span>{{ countSearch }}</span>
+                <span>{{ countMatches.toLocaleString() }}</span>
               </template>
             </div>
           </TabPanel>
         </TabPanels>
       </TabGroup>
 
+      <!-- info -->
+      <template v-if="tab === 0">
+        <div>{{ searches.length.toLocaleString() }} searches</div>
+      </template>
+      <template v-if="tab === 1">
+        <div>{{ summary.total.toLocaleString() }} matches</div>
+      </template>
+
+      <!-- slider -->
       <label
         v-tooltip="
           'Threshold for close matches. Setting this very low can cause slowdown.'
         "
       >
         Exactness
-        <input
-          v-model.number="exactness"
-          type="range"
-          :min="0"
-          :max="1"
-          :step="0.01"
-        />
-        {{ (100 * exactness).toFixed(0) }}%
+        <AppSlider v-model="exactness" :min="0" :max="1" :step="0.01" />
+        <span style="width: 35px; text-align: right"
+          >{{ (100 * exactness).toFixed(0) }}%</span
+        >
       </label>
     </div>
 
-    <div class="right" ref="rightElement">
+    <!-- right panel -->
+    <div ref="rightElement" class="right">
       <AppEditor
         v-model="text"
         :highlights="highlights"
@@ -119,12 +129,13 @@
         @deselect="deselect"
       >
         <template #placeholder>
-          Text to check
+          Text to search
           <br />
           <br />
           {{ placeholder }}
         </template>
       </AppEditor>
+
       <div class="text-controls-container">
         <div class="text-controls">
           <template v-if="text">
@@ -140,7 +151,6 @@
               <X />
             </button>
           </template>
-
           <template v-else>
             <button
               v-if="exampleText.trim()"
@@ -192,13 +202,14 @@ import exampleSearch from "@/assets/example-search.txt?raw";
 import exampleText from "@/assets/example-text.txt?raw";
 import logo from "@/assets/logo.svg?raw";
 import AppEditor from "@/components/AppEditor.vue";
+import AppSlider from "@/components/AppSlider.vue";
 import AppUpload from "@/components/AppUpload.vue";
 import { useScrollable } from "@/util/composables";
 import { sleep } from "@/util/misc";
 import { getPool } from "@/util/pool";
 import { splitWords } from "@/util/search";
 import type { Match } from "@/util/search";
-import * as SearchAPI from "@/util/search";
+import type * as SearchAPI from "@/util/search";
 import SearchWorker from "@/util/search?worker";
 
 /** placeholder text */
@@ -225,7 +236,7 @@ const rightElement = useTemplateRef("rightElement");
 
 /** scroll indicators */
 useScrollable(searchElement, "var(--white)");
-useScrollable(summaryElement, "var(--white)");
+useScrollable(summaryElement, "var(--light-gray)");
 
 /** scroll position */
 const { y } = useWindowScroll();
@@ -303,7 +314,7 @@ watch(
       paragraphs.value.map((paragraph) => (offset += paragraph.length + 1)),
     );
 
-    let matches = (
+    const matches = (
       (await Promise.all(
         /** for each paragraph */
         paragraphs.value.map(async (paragraph, index) => {
@@ -370,7 +381,7 @@ const summary = computed(() => {
   );
   /** hard limit counts to avoid rendering slowness */
   counts = orderBy(counts, "[1]", "desc").slice(0, 100);
-  return { total, counts };
+  return { total, counts: Object.fromEntries(counts) };
 });
 
 /** switch to summary view */
@@ -380,7 +391,7 @@ watchEffect(() => {
 
 /** select highlight */
 const select = (
-  { text, search, score }: (typeof highlights)["value"][number]["data"],
+  { search, score }: (typeof highlights)["value"][number]["data"],
   anchor: HTMLElement,
 ) => {
   /** use single tippy instance for highlights for performance */
@@ -388,9 +399,7 @@ const select = (
   /** create tippy instance */
   tooltip.value = tippy(anchor);
   /** set tooltip content */
-  tooltip.value.setContent(
-    `"${text}" matches "${search}" ${(100 * score).toFixed(0)}%`,
-  );
+  tooltip.value.setContent(`Matches "${search}" ${(100 * score).toFixed(0)}%`);
   /** programmatically show */
   tooltip.value.show();
 };
@@ -411,7 +420,6 @@ const scrollToTop = async () => {
 <style scoped>
 section {
   display: flex;
-  padding: 0;
 }
 
 .left {
@@ -425,11 +433,10 @@ section {
   min-width: 200px;
   max-width: 50vw;
   height: 100vh;
-  padding: 40px;
+  padding: 30px 40px;
   overflow-y: auto;
   gap: 20px;
   background: var(--pale);
-  box-shadow: var(--shadow);
   resize: horizontal;
 }
 
@@ -440,8 +447,13 @@ section {
   flex-direction: column;
 }
 
-.logo > :deep(svg) {
+.logo {
+  flex-shrink: 0;
   height: 30px;
+}
+
+.logo > :deep(svg) {
+  height: 100%;
 }
 
 .tabs {
@@ -457,11 +469,13 @@ section {
 }
 
 .search {
+  display: flex;
   position: relative;
   flex-grow: 1;
   flex-shrink: 0;
   width: 100%;
   overflow: auto;
+  overscroll-behavior: none;
   resize: vertical;
 }
 
@@ -471,6 +485,7 @@ section {
   top: 0;
   right: 0;
   flex-wrap: wrap;
+  align-items: center;
   justify-content: center;
   padding: 10px;
   gap: 5px;
@@ -483,9 +498,10 @@ section {
   flex-shrink: 0;
   align-content: flex-start;
   width: 100%;
+  height: 0;
   padding: 20px;
-  overflow-x: auto;
-  overflow-y: auto;
+  overflow: auto;
+  overscroll-behavior: none;
   gap: 10px 20px;
   border-radius: var(--rounded);
   resize: vertical;
@@ -494,11 +510,6 @@ section {
 .summary > * {
   min-width: 0;
   overflow-wrap: break-word;
-}
-
-.summary > :nth-child(1),
-.summary > :nth-child(2) {
-  font-weight: 600;
 }
 
 .text-controls-container {
