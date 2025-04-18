@@ -47,8 +47,13 @@
             <div class="search">
               <textarea
                 ref="searchElement"
-                v-model="search"
                 placeholder="Phrases to search for&#10;Line or comma separated"
+                :value="search"
+                @input="
+                  search = (
+                    $event.target as HTMLTextAreaElement
+                  ).value.replaceAll(/,/g, '\n')
+                "
               />
 
               <div class="search-controls">
@@ -83,7 +88,7 @@
 
           <!-- summary -->
           <TabPanel as="template">
-            <div ref="summaryElement" class="summary">
+            <div v-if="summary.total" ref="summaryElement" class="summary">
               <template
                 v-for="(
                   countMatches, countSearch, countIndex
@@ -102,16 +107,21 @@
                 </span>
               </template>
             </div>
+            <div v-else class="secondary">Matches will appear here</div>
           </TabPanel>
         </TabPanels>
       </TabGroup>
 
       <!-- info -->
       <template v-if="tab === 0">
-        <div>{{ searches.length.toLocaleString() }} searches</div>
+        <div class="secondary">
+          {{ searches.length.toLocaleString() }} searches
+        </div>
       </template>
       <template v-if="tab === 1">
-        <div>{{ summary.total.toLocaleString() }} matches</div>
+        <div class="secondary">
+          {{ summary.total.toLocaleString() }} matches
+        </div>
       </template>
 
       <!-- slider -->

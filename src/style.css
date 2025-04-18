@@ -5,7 +5,7 @@
 
   --black: #000000;
   --dark-gray: hsl(185, 10%, 30%);
-  --gray: hsl(185, 10%, 75%);
+  --gray: hsl(185, 10%, 65%);
   --light-gray: hsl(185, 10%, 90%);
   --white: #ffffff;
 
@@ -132,6 +132,10 @@ textarea {
   border: none;
   border-radius: var(--rounded);
   font: inherit;
+}
+
+.secondary {
+  color: var(--gray);
 }
 
 ::selection {
