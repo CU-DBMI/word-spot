@@ -1,13 +1,38 @@
 <template>
   <section>
     <div class="left">
-      <TabGroup>
+      <div v-html="logo" class="logo" />
+
+      <TabGroup :selectedIndex="tab" @change="(value) => (tab = value)">
         <TabList class="tabs">
           <Tab v-slot="{ selected }" as="template">
             <button :class="!selected && 'secondary'">Search</button>
           </Tab>
           <Tab v-slot="{ selected }" as="template">
-            <button :class="!selected && 'secondary'">Results</button>
+            <button :class="!selected && 'secondary'">
+              <template v-if="progress">
+                Analyzing
+                <svg viewBox="-50 -50 100 100" height="1.5em">
+                  <circle
+                    r="40"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="10"
+                    opacity="0.25"
+                  />
+                  <circle
+                    r="40"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="10"
+                    pathLength="1"
+                    :stroke-dasharray="`${progress} 1`"
+                    transform="rotate(-90)"
+                  />
+                </svg>
+              </template>
+              <template v-else>Summary</template>
+            </button>
           </Tab>
         </TabList>
         <TabPanels as="template">
@@ -17,7 +42,7 @@
                 ref="searchElement"
                 v-model="search"
                 placeholder="Phrases to check for"
-                v-tooltip="'Comma or newline-separated'"
+                v-tooltip="'Comma or line-separated'"
               />
 
               <div class="search-controls">
@@ -146,32 +171,17 @@
       </div>
     </div>
   </section>
-
-  <aside v-if="progress">
-    Analyzing
-    <svg viewBox="-50 -50 100 100" height="2em">
-      <circle
-        r="40"
-        fill="none"
-        stroke="var(--light-gray)"
-        stroke-width="10"
-        pathLength="1"
-      />
-      <circle
-        r="40"
-        fill="none"
-        stroke="var(--primary)"
-        stroke-width="10"
-        pathLength="1"
-        :stroke-dasharray="`${progress} 1`"
-        transform="rotate(-90)"
-      />
-    </svg>
-  </aside>
 </template>
 
 <script setup lang="ts">
-import { computed, ref, shallowRef, useTemplateRef, watch } from "vue";
+import {
+  computed,
+  ref,
+  shallowRef,
+  useTemplateRef,
+  watch,
+  watchEffect,
+} from "vue";
 import { tippy } from "vue-tippy";
 import { groupBy, orderBy } from "lodash";
 import { ArrowUp, Lightbulb, X } from "lucide-vue-next";
@@ -180,6 +190,7 @@ import { Tab, TabGroup, TabList, TabPanel, TabPanels } from "@headlessui/vue";
 import { useDebounce, useLocalStorage, useWindowScroll } from "@vueuse/core";
 import exampleSearch from "@/assets/example-search.txt?raw";
 import exampleText from "@/assets/example-text.txt?raw";
+import logo from "@/assets/logo.svg?raw";
 import AppEditor from "@/components/AppEditor.vue";
 import AppUpload from "@/components/AppUpload.vue";
 import { useScrollable } from "@/util/composables";
@@ -223,6 +234,7 @@ const { y } = useWindowScroll();
 // window.localStorage.clear();
 
 /** state */
+const tab = ref(0);
 const text = useLocalStorage("text", "");
 const search = useLocalStorage("search", "");
 const exactness = ref(1);
@@ -361,15 +373,18 @@ const summary = computed(() => {
   return { total, counts };
 });
 
+/** switch to summary view */
+watchEffect(() => {
+  if (summary.value.total) tab.value = 1;
+});
+
 /** select highlight */
 const select = (
   { text, search, score }: (typeof highlights)["value"][number]["data"],
-  element: HTMLElement[],
+  anchor: HTMLElement,
 ) => {
-  /** element to anchor tooltip to */
-  const anchor = element[0];
-  if (!anchor) return;
   /** use single tippy instance for highlights for performance */
+
   /** create tippy instance */
   tooltip.value = tippy(anchor);
   /** set tooltip content */
@@ -422,36 +437,32 @@ section {
   display: flex;
   position: relative;
   flex-grow: 1;
-  align-items: flex-start;
+  flex-direction: column;
 }
 
-aside {
-  display: flex;
-  position: fixed;
-  right: 0;
-  bottom: 0;
-  align-items: center;
-  padding: 20px;
-  gap: 10px;
-  background: var(--pale);
+.logo > :deep(svg) {
+  height: 30px;
 }
 
 .tabs {
   display: flex;
-  justify-content: center;
+  flex-wrap: wrap;
   width: 100%;
   gap: 10px;
+}
+
+.tabs > * {
+  flex-grow: 1;
+  flex-basis: 0;
 }
 
 .search {
   position: relative;
   flex-grow: 1;
+  flex-shrink: 0;
   width: 100%;
-}
-
-.search > textarea {
-  min-height: 100%;
-  resize: none;
+  overflow: auto;
+  resize: vertical;
 }
 
 .search-controls {
@@ -469,6 +480,7 @@ aside {
   display: grid;
   grid-template-columns: 1fr max-content;
   flex-grow: 1;
+  flex-shrink: 0;
   align-content: flex-start;
   width: 100%;
   padding: 20px;
@@ -476,6 +488,7 @@ aside {
   overflow-y: auto;
   gap: 10px 20px;
   border-radius: var(--rounded);
+  resize: vertical;
 }
 
 .summary > * {
@@ -511,7 +524,7 @@ aside {
   opacity: 0.5;
 }
 
-@media (max-width: 800px) {
+@media (width < 600px) {
   section {
     flex-direction: column;
   }
@@ -521,11 +534,22 @@ aside {
     width: 100%;
     min-width: 100%;
     max-width: 100%;
-    resize: none;
+    height: unset;
+    min-height: min-content;
+    min-height: 25vh;
+    resize: vertical;
   }
 
-  .search > textarea {
-    min-height: unset;
+  .search,
+  .summary {
+    height: unset !important;
+    resize: none;
+  }
+}
+
+@media (width >= 600px) {
+  .left {
+    height: 100vh !important;
   }
 }
 </style>

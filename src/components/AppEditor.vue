@@ -13,12 +13,6 @@
       <div
         v-for="(rect, rectIndex) in rects"
         :key="rectIndex"
-        :ref="
-          (el) => {
-            selectedRefs[highlightIndex] ??= [];
-            selectedRefs[highlightIndex][rectIndex] = el as HTMLDivElement;
-          }
-        "
         :class="[
           'highlight',
           selectedIndex === highlightIndex && 'highlight-selected',
@@ -32,10 +26,10 @@
           height: rect.height + 'px',
           '--strength': highlights[highlightIndex]?.strength,
         }"
-        @mouseenter="selectedIndex = highlightIndex"
-        @mouseleave="selectedIndex = -1"
-        @focus="selectedIndex = highlightIndex"
-        @blur="selectedIndex = -1"
+        @mouseenter="select($event, highlightIndex)"
+        @focus="select($event, highlightIndex)"
+        @mouseleave="deselect()"
+        @blur="deselect()"
       />
     </template>
   </div>
@@ -95,7 +89,7 @@ const { modelValue, highlights } = defineProps<Props>();
 type Emits = {
   "update:modelValue": [Value];
   /** when highlight is hovered */
-  select: [Data, HTMLDivElement[]];
+  select: [Data, HTMLDivElement];
   /** when highlight is unhovered */
   deselect: [];
 };
@@ -111,7 +105,7 @@ defineSlots<Slots>();
 /** elements */
 const editorElement = useTemplateRef("editorElement");
 const editableElement = useTemplateRef("editableElement");
-const selectedRefs = ref<HTMLDivElement[][]>([]);
+const selectedRef = ref<HTMLDivElement>();
 
 /** element properties */
 const editorBbox = useElementBounding(editorElement);
@@ -189,13 +183,13 @@ watch(
 
 /** when selected index changes */
 watch(
-  [selectedIndex, selectedRefs],
+  [selectedIndex, selectedRef],
   () => {
-    if (selectedIndex.value === -1) emit("deselect");
+    if (selectedIndex.value === -1 || !selectedRef.value) emit("deselect");
     else {
       const highlight = highlights[selectedIndex.value]!;
       /** notify parent of highlight being selected */
-      emit("select", highlight.data, selectedRefs.value[selectedIndex.value]!);
+      emit("select", highlight.data, selectedRef.value);
     }
   },
   { immediate: true, deep: true },
@@ -278,6 +272,18 @@ watch(
   { immediate: true, deep: true },
 );
 
+/** select highlight */
+const select = (event: Event, index: number) => {
+  selectedIndex.value = index;
+  selectedRef.value = event.target as HTMLDivElement;
+};
+
+/** deselect highlight */
+const deselect = () => {
+  selectedIndex.value = -1;
+  selectedRef.value = undefined;
+};
+
 /** cleanup */
 onUnmounted(() => {
   removeTextContentListener();
@@ -288,22 +294,24 @@ onUnmounted(() => {
 
 <style scoped>
 .editor {
+  display: flex;
   position: relative;
-  width: 100%;
-  height: 100%;
+  flex-grow: 1;
 }
 
 .editable {
-  min-width: 100%;
-  min-height: 100%;
+  flex-grow: 1;
   padding: 40px;
+}
+
+.editor:has(.placeholder) .editable {
+  position: absolute;
+  inset: 0;
 }
 
 .placeholder {
   display: flex;
-  position: absolute;
   flex-direction: column;
-  inset: 0;
   padding: 40px;
   gap: 20px;
   color: var(--gray);
