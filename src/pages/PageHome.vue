@@ -107,7 +107,7 @@
                 </span>
               </template>
             </div>
-            <div v-else class="secondary">Matches will appear here</div>
+            <div v-else class="secondary" style="flex-grow: 1">Matches will appear here</div>
           </TabPanel>
         </TabPanels>
       </TabGroup>
@@ -590,7 +590,8 @@ section {
 
   .search,
   .summary {
-    height: unset !important;
+    height: 0 !important;
+    min-height: 100px !important;
     resize: none;
   }
 }
