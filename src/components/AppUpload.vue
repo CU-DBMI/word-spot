@@ -77,7 +77,7 @@ const onLoad = async (fileList: FileList | null) => {
   /** parse file uploads as text */
   const files =
     (await Promise.all(
-      Array.from(fileList).map(async (file) => {
+      [...fileList].map(async (file) => {
         let text = "";
 
         /** parse as appropriate format */

@@ -9,11 +9,11 @@
         <!-- buttons -->
         <TabList class="tabs">
           <Tab v-slot="{ selected }" as="template">
-            <button :class="!selected && 'secondary'">Search</button>
+            <button :class="selected ? 'primary' : 'secondary'">Search</button>
           </Tab>
 
           <Tab v-slot="{ selected }" as="template">
-            <button :class="!selected && 'secondary'">
+            <button :class="selected ? 'primary' : 'secondary'">
               <template v-if="progress">
                 Analyzing
                 <svg viewBox="-50 -50 100 100" height="1.5em">
@@ -90,8 +90,16 @@
                 ) in summary.counts"
                 :key="countIndex"
               >
-                <span>{{ countSearch }}</span>
-                <span>{{ countMatches.toLocaleString() }}</span>
+                <button
+                  v-tooltip="'Jump to matching text'"
+                  class="normal summary-text"
+                  @click="editorRef?.jumpTo(countSearch)"
+                >
+                  {{ countSearch }}
+                </button>
+                <span class="summary-count">
+                  {{ countMatches.toLocaleString() }}
+                </span>
               </template>
             </div>
           </TabPanel>
@@ -123,6 +131,7 @@
     <!-- right panel -->
     <div ref="rightElement" class="right">
       <AppEditor
+        ref="editorRef"
         v-model="text"
         :highlights="highlights"
         @select="select"
@@ -207,7 +216,7 @@ import AppUpload from "@/components/AppUpload.vue";
 import { useScrollable } from "@/util/composables";
 import { sleep } from "@/util/misc";
 import { getPool } from "@/util/pool";
-import { splitWords } from "@/util/search";
+import { normalize, splitWords } from "@/util/search";
 import type { Match } from "@/util/search";
 import type * as SearchAPI from "@/util/search";
 import SearchWorker from "@/util/search?worker";
@@ -233,10 +242,11 @@ const uploadTooltip =
 const searchElement = useTemplateRef("searchElement");
 const summaryElement = useTemplateRef("summaryElement");
 const rightElement = useTemplateRef("rightElement");
+const editorRef = useTemplateRef("editorRef");
 
 /** scroll indicators */
 useScrollable(searchElement, "var(--white)");
-useScrollable(summaryElement, "var(--light-gray)");
+useScrollable(summaryElement, "transparent");
 
 /** scroll position */
 const { y } = useWindowScroll();
@@ -305,7 +315,7 @@ watch(
 
     /** pre-compute search windows */
     const _searches = searches.value.map(
-      (search) => [search.toLowerCase(), splitWords(search).length] as const,
+      (search) => [normalize(search), splitWords(search).length] as const,
     );
 
     /** paragraph char offsets */
@@ -321,7 +331,7 @@ watch(
           /** get search results */
           const matches = await run((worker) =>
             worker.getMatches(
-              paragraph.toLowerCase(),
+              normalize(paragraph),
               _searches,
               exact.value,
               offsets[index],
@@ -369,6 +379,7 @@ const highlights = computed(() =>
     start,
     end,
     strength: score,
+    id: search,
     data: { score, text, search },
   })),
 );
@@ -381,7 +392,10 @@ const summary = computed(() => {
   );
   /** hard limit counts to avoid rendering slowness */
   counts = orderBy(counts, "[1]", "desc").slice(0, 100);
-  return { total, counts: Object.fromEntries(counts) };
+  return {
+    total,
+    counts: Object.fromEntries(counts) as Record<string, number>,
+  };
 });
 
 /** switch to summary view */
@@ -502,14 +516,27 @@ section {
   padding: 20px;
   overflow: auto;
   overscroll-behavior: none;
-  gap: 10px 20px;
+  gap: 0 10px;
   border-radius: var(--rounded);
   resize: vertical;
 }
 
 .summary > * {
   min-width: 0;
+}
+
+.summary-text {
+  justify-content: flex-start;
+  text-align: left;
   overflow-wrap: break-word;
+}
+
+.summary-text:hover {
+  background: var(--light-gray);
+}
+
+.summary-count {
+  text-align: right;
 }
 
 .text-controls-container {

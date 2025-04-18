@@ -10,6 +10,9 @@ export type Match = {
   end: number;
 };
 
+/** normalize string */
+export const normalize = (text: string) => text.toLowerCase();
+
 /** get all matches of regex, with indices */
 export const matchAll = (regex: string, text: string) =>
   [...text.matchAll(new RegExp(regex, "gud"))].map((match) => ({

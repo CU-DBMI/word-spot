@@ -67,30 +67,38 @@ button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: 5px 10px;
   gap: 5px;
   border: none;
   border-radius: var(--rounded);
-  background: var(--primary);
-  color: var(--white);
+  background: none;
   font: inherit;
-  font-weight: 500;
   cursor: pointer;
 }
 
 button:hover {
-  background: var(--dark-gray);
+  color: var(--primary);
 }
 
 button.square {
   width: 35px;
   height: 35px;
-  padding: 0;
   border-radius: 999px;
+  background: var(--primary);
+  color: var(--white);
+}
+
+button.square:hover {
+  background: var(--dark-gray);
+}
+
+button.primary {
+  padding: 5px 10px;
+  background: var(--primary);
+  color: var(--white);
 }
 
 button.secondary {
-  background: none;
+  padding: 5px 10px;
   color: var(--primary);
 }
 

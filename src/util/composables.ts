@@ -10,7 +10,7 @@ import icon from "@/assets/angle.svg";
 /** add classes to element when scrollable for styling */
 export const useScrollable = (
   element: Ref<HTMLElement | null | undefined>,
-  backgroundColor = "#ffffff",
+  backgroundColor = "transparent",
   shadowColor = "#80808040",
   arrowColor = "#808080a0",
   shadowSize = 30,

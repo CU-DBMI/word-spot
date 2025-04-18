@@ -26,6 +26,7 @@
           height: rect.height + 'px',
           '--strength': highlights[highlightIndex]?.strength,
         }"
+        :data-id="normalize(highlights[highlightIndex]?.id ?? '')"
         @mouseenter="select($event, highlightIndex)"
         @focus="select($event, highlightIndex)"
         @mouseleave="deselect()"
@@ -58,6 +59,7 @@ import { $canShowPlaceholder } from "@lexical/text";
 import { $descendantsMatching } from "@lexical/utils";
 import { useElementBounding, useScroll } from "@vueuse/core";
 import { flag } from "@/util/misc";
+import { normalize } from "@/util/search";
 
 /**
  * editable textarea with highlighting is deceptively complex problem to solve
@@ -75,6 +77,8 @@ type Highlights = {
   end: number;
   /** strength of highlight */
   strength: number;
+  /** identifier for highlight */
+  id?: string;
   /** arbitrary data associated with highlight */
   data: Data;
 }[];
@@ -290,6 +294,31 @@ onUnmounted(() => {
   removeUpdateListener();
   removeEditableListener();
 });
+
+/** last jumped-to highlight */
+let lastHighlight: HTMLDivElement;
+
+/** focus highlight */
+const jumpTo = (id: string) => {
+  id = normalize(id);
+  /** get all highlights matching id */
+  const highlights = [
+    ...document.querySelectorAll<HTMLDivElement>(`[data-id="${id}"]`),
+  ];
+  /** get currently focused highlight, if any */
+  const focused = highlights.findIndex(
+    (highlight) => highlight === lastHighlight,
+  );
+  /** get next highlight */
+  const next = highlights[(focused + 1) % highlights.length];
+  if (!next) return;
+  /** focus highlight */
+  next.focus({ preventScroll: true });
+  next.scrollIntoView({ block: "center", behavior: "smooth" });
+  lastHighlight = next;
+};
+
+defineExpose({ jumpTo });
 </script>
 
 <style scoped>
