@@ -61,7 +61,7 @@ export const getMatches = (
         const end = windowWords.at(-1)?.end ?? 0;
 
         if (exact) {
-          if (text === search)
+          if (normalize(text) === normalize(search))
             matches.push({ text, search, score: 1, start, end });
         } else {
           /** calculate distance between strings */

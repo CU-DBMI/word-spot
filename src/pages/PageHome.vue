@@ -14,7 +14,7 @@
 
           <Tab v-slot="{ selected }" as="template">
             <button :class="selected ? 'primary' : 'secondary'">
-              <template v-if="progress">
+              <template v-if="debouncedProgress">
                 Analyzing
                 <svg viewBox="-50 -50 100 100" height="1.5em">
                   <circle
@@ -228,7 +228,7 @@ import exampleText from "@/example/text.txt?raw";
 import { useScrollable } from "@/util/composables";
 import { sleep } from "@/util/misc";
 import { getPool } from "@/util/pool";
-import { normalize, splitWords } from "@/util/search";
+import { splitWords } from "@/util/search";
 import type { Match } from "@/util/search";
 import type * as SearchAPI from "@/util/search";
 import SearchWorker from "@/util/search?worker";
@@ -273,6 +273,7 @@ const search = useLocalStorage("search", "");
 const exactness = ref(1);
 const tooltip = ref<Instance>();
 const progress = ref(0);
+const debouncedProgress = useDebounce(progress, 300, { maxWait: 300 });
 
 /** debounced state */
 const debouncedText = useDebounce(text, 500);
@@ -327,7 +328,7 @@ watch(
 
     /** pre-compute search windows */
     const _searches = searches.value.map(
-      (search) => [normalize(search), splitWords(search).length] as const,
+      (search) => [search, splitWords(search).length] as const,
     );
 
     /** paragraph char offsets */
@@ -343,12 +344,13 @@ watch(
           /** get search results */
           const matches = await run((worker) =>
             worker.getMatches(
-              normalize(paragraph),
+              paragraph,
               _searches,
               exact.value,
               offsets[index],
             ),
           );
+
           /** update progress */
           progress.value = ++done / paragraphs.value.length;
           return matches;
@@ -412,7 +414,8 @@ const summary = computed(() => {
 
 /** switch to summary view */
 watchEffect(() => {
-  if (summary.value.total) tab.value = 1;
+  if (summary.value.total && document.activeElement === document.body)
+    tab.value = 1;
 });
 
 /** select highlight */
