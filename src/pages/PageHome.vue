@@ -528,10 +528,8 @@ section {
   align-content: flex-start;
   width: 100%;
   height: 0;
-  padding: 20px;
   overflow: auto;
   overscroll-behavior: none;
-  gap: 0 10px;
   border-radius: var(--rounded);
   resize: vertical;
 }
@@ -551,6 +549,7 @@ section {
 }
 
 .summary-count {
+  padding: 0 15px;
   text-align: right;
 }
 

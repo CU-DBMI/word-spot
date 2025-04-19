@@ -199,82 +199,85 @@ watch(
   { immediate: true, deep: true },
 );
 
-watch(
-  /** when model value changes or editor resized */
-  [() => modelValue, () => highlights, editorBbox.width, editorBbox.height],
-  /**
-   * only need to detect when positions of words change _relative to editor
-   * container_, i.e. when text or word wrapping changes. thus, don't need to
-   * listen to editor bbox x/y or scroll x/y due to how highlights positioned
-   * with CSS.
-   */
-  () => {
-    /** create text selection to be reused */
-    const range = document.createRange();
+/** calculate position of highlight rectangles */
+const updateRects = () => {
+  /** create text selection to be reused */
+  const range = document.createRange();
 
-    /** reset rects */
-    highlightRects.value = [];
+  /** reset rects */
+  highlightRects.value = [];
 
-    editor.read(() => {
-      /** get all relevant lexical nodes */
-      const textNodes = $descendantsMatching(
-        $getRoot().getChildren(),
-        (node) => node instanceof TextNode || node instanceof LineBreakNode,
-      );
+  editor.read(() => {
+    /** get all relevant lexical nodes */
+    const textNodes = $descendantsMatching(
+      $getRoot().getChildren(),
+      (node) => node instanceof TextNode || node instanceof LineBreakNode,
+    );
 
-      /** track character position/count */
-      let charIndex = 0;
+    /** track character position/count */
+    let charIndex = 0;
 
-      for (const textNode of textNodes) {
-        /** get actual dom text node from lexical text node */
-        const text = editor.getElementByKey(textNode.getKey())?.firstChild;
+    for (const textNode of textNodes) {
+      /** get actual dom text node from lexical text node */
+      const text = editor.getElementByKey(textNode.getKey())?.firstChild;
 
-        /** num of chars in text node */
-        const chars = textNode.getTextContentSize();
+      /** num of chars in text node */
+      const chars = textNode.getTextContentSize();
 
-        if (text instanceof Text && text.nodeType === Node.TEXT_NODE) {
-          /** find all highlight ranges that fall within this text */
-          const inRange = highlights.filter(
-            ({ start, end }) =>
-              start >= charIndex &&
-              start <= charIndex + chars &&
-              end >= charIndex &&
-              end <= charIndex + chars,
-          );
+      if (text instanceof Text && text.nodeType === Node.TEXT_NODE) {
+        /** find all highlight ranges that fall within this text */
+        const inRange = highlights.filter(
+          ({ start, end }) =>
+            start >= charIndex &&
+            start <= charIndex + chars &&
+            end >= charIndex &&
+            end <= charIndex + chars,
+        );
 
-          /** for each range */
-          for (const { start, end } of inRange) {
-            /** set selection */
-            range.setStart(text, start - charIndex);
-            range.setEnd(text, end - charIndex);
+        /** for each range */
+        for (const { start, end } of inRange) {
+          /** set selection */
+          range.setStart(text, start - charIndex);
+          range.setEnd(text, end - charIndex);
 
-            /** get bboxes of selection (can be multiple due to line wrapping) */
-            const rects: DOMRect[] = [];
-            for (const rect of range.getClientRects())
-              rects.push(
-                /** rect is current bbox of text (relative to screen) */
-                new DOMRect(
-                  /**
-                   * find bbox of text relative to editor by subtracting current
-                   * bbox of editor (relative to screen)
-                   */
-                  rect.left - editorBbox.left.value + editorScroll.x.value,
-                  rect.top - editorBbox.top.value + editorScroll.y.value,
-                  rect.width,
-                  rect.height,
-                ),
-              );
+          /** get bboxes of selection (can be multiple due to line wrapping) */
+          const rects: DOMRect[] = [];
+          for (const rect of range.getClientRects())
+            rects.push(
+              /** rect is current bbox of text (relative to screen) */
+              new DOMRect(
+                /**
+                 * find bbox of text relative to editor by subtracting current
+                 * bbox of editor (relative to screen)
+                 */
+                rect.left - editorBbox.left.value + editorScroll.x.value,
+                rect.top - editorBbox.top.value + editorScroll.y.value,
+                rect.width,
+                rect.height,
+              ),
+            );
 
-            highlightRects.value.push(rects);
-          }
+          highlightRects.value.push(rects);
         }
-        /** increment char */
-        charIndex += chars;
       }
-    });
-  },
+      /** increment char */
+      charIndex += chars;
+    }
+  });
+};
+
+/**
+ * only need to detect when positions of words change _relative to editor
+ * container_, i.e. when text content, word wrapping, or font family changes.
+ * don't need to listen to editor bbox x/y or scroll x/y due to how highlights
+ * positioned with CSS.
+ */
+watch(
+  [() => modelValue, () => highlights, editorBbox.width, editorBbox.height],
+  updateRects,
   { immediate: true, deep: true },
 );
+document.fonts.addEventListener("loadingdone", updateRects);
 
 /** select highlight */
 const select = (event: Event, index: number) => {
